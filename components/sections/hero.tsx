@@ -25,10 +25,10 @@ export function Hero({
     <section className={clsx('py-16', className)} {...props}>
       <Container className="flex flex-col gap-16">
         <div className="flex flex-col items-center gap-32">
-          <div className="flex flex-col items-center gap-6">
+          <div className="flex flex-col items-start sm:items-center gap-6">
             {eyebrow}
-            <Heading className="max-w-5xl text-center">{headline}</Heading>
-            <Text size="lg" className="flex max-w-3xl flex-col gap-4 text-center">
+            <Heading className="max-w-5xl text-start sm:text-center">{headline}</Heading>
+            <Text size="lg" className="flex max-w-3xl flex-col gap-4 text-start sm:text-center">
               {subheadline}
             </Text>
             

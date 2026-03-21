@@ -17,7 +17,7 @@ export function NavbarLink({
       {...props}
     >
       {children}
-      <span className="inline-flex p-1.5 opacity-0 group-hover:opacity-100 lg:hidden" aria-hidden="true">
+      <span className="inline-flex p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 lg:hidden" aria-hidden="true">
         <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
           <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
         </svg>

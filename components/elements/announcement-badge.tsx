@@ -1,4 +1,7 @@
+'use client'
+
 import { clsx } from 'clsx/lite'
+import { motion } from 'motion/react'
 import type { ComponentProps, ReactNode } from 'react'
 
 function ArrowRightIcon({ className, ...props }: ComponentProps<'svg'>) {
@@ -21,6 +24,8 @@ function ArrowRightIcon({ className, ...props }: ComponentProps<'svg'>) {
   )
 }
 
+const tapTransition = { type: 'spring' as const, duration: 0.5, bounce: 0 }
+
 export function AnnouncementBadge({
   text,
   badgeText,
@@ -31,25 +36,27 @@ export function AnnouncementBadge({
   text: ReactNode
   href: string
   badgeText: string
-} & Omit<ComponentProps<'a'>, 'href' | 'children'>) {
+} & Omit<ComponentProps<typeof motion.a>, 'href' | 'children'>) {
   return (
-    <a
+    <motion.a
       href={href}
+      whileTap={{ scale: 0.97 }}
+      transition={tapTransition}
       {...props}
       className={clsx(
-        'group relative inline-flex max-w-full gap-x-3 overflow-hidden rounded-md p-32 text-sm/6 max-sm:flex-col sm:items-center sm:rounded-full sm:p-0.5',
+        'group relative inline-flex max-w-full gap-x-3 overflow-hidden text-sm/6 items-center rounded-full p-0.75',
         'bg-taupe-950/5 text-taupe-950 border-shadow hover:bg-taupe-950/5 dark:bg-taupe-50/5 dark:text-taupe-50 dark:inset-ring-1 dark:inset-ring-taupe-50/5 dark:hover:bg-taupe-50/5',
         className,
       )}
     >
       {badgeText && (
-        <span className="bg-taupe-900 dark:bg-taupe-100 px-2.5 rounded-full hidden sm:block py-1">
-          <h3 className="text-xs font-medium text-taupe-100 dark:text-taupe-900 ">{badgeText}</h3>
+        <span className="bg-taupe-700 dark:bg-taupe-300 px-2.5 rounded-full py-1">
+          <h3 className="text-xs font-medium text-taupe-100 dark:text-taupe-900  ">{badgeText}</h3>
         </span>
       )}
-      <span className="text-pretty sm:truncate">{text}</span>
+      <span className="text-pretty truncate line-clamp-1 ">{text}</span>
       <ArrowRightIcon className=" -ms-0.5 me-2" />
 
-    </a>
+    </motion.a>
   )
 }
