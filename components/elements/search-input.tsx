@@ -10,7 +10,7 @@ export function SearchInput({
   return (
     <div
       className={clsx(
-        'flex items-center gap-3 rounded-xl bg-taupe-50 px-2 py-1.5 text-sm/7 border-shadow dark:bg-taupe-900',
+        'flex items-center gap-3 rounded-xl bg-taupe-950/5 px-3 py-1.5 text-sm/7 border-shadow dark:bg-taupe-50/5 dark:inset-ring-1 dark:inset-ring-taupe-50/5',
         className,
       )}
     >

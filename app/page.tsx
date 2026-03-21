@@ -42,7 +42,7 @@ export default function Page() {
             <AnnouncementBadge
               href="#"
               text="Introducing React Native Motion v1.0"
-              cta="Learn more"
+              badgeText="New"
             />
           }
           headline="React Native Motion"

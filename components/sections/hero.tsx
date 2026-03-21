@@ -31,6 +31,7 @@ export function Hero({
             <Text size="lg" className="flex max-w-3xl flex-col gap-4 text-center">
               {subheadline}
             </Text>
+            
             {cta}
           </div>
           {demo}

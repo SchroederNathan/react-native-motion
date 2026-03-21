@@ -1,7 +1,5 @@
-'use client'
-
 import { clsx } from 'clsx/lite'
-import { type ComponentProps, type ReactNode, useState } from 'react'
+import { type ComponentProps, type ReactNode } from 'react'
 
 export function NavbarLink({
   children,
@@ -43,7 +41,6 @@ export function Navbar({
   actions: ReactNode
   links?: ReactNode
 } & ComponentProps<'header'>) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <header className={clsx('sticky top-0 z-10 bg-taupe-100 dark:bg-taupe-950', className)} {...props}>
@@ -54,50 +51,10 @@ export function Navbar({
             <div className="flex items-center">{logo}</div>
             <div className="flex gap-8 max-lg:hidden">{links}</div>
           </div>
-          <div className="flex flex-1 items-center justify-end gap-4">
-            <div className="flex shrink-0 items-center gap-5">{actions}</div>
+          <div className="flex shrink-0 items-center gap-5">{actions}</div>
 
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
-              className="inline-flex rounded-full p-1.5 text-taupe-950 hover:bg-taupe-950/10 lg:hidden dark:text-taupe-50 dark:hover:bg-taupe-50/10"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="size-6">
-                <path
-                  fillRule="evenodd"
-                  d="M3.748 8.248a.75.75 0 0 1 .75-.75h15a.75.75 0 0 1 0 1.5h-15a.75.75 0 0 1-.75-.75ZM3.748 15.75a.75.75 0 0 1 .75-.751h15a.75.75 0 0 1 0 1.5h-15a.75.75 0 0 1-.75-.75Z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
-          </div>
         </div>
 
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 bg-taupe-100 px-6 py-6 lg:hidden lg:px-10 dark:bg-taupe-950">
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setMobileMenuOpen(false)}
-                aria-label="Close menu"
-                className="inline-flex rounded-full p-1.5 text-taupe-950 hover:bg-taupe-950/10 dark:text-taupe-50 dark:hover:bg-taupe-50/10"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="size-6"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="mt-6 flex flex-col gap-6">{links}</div>
-          </div>
-        )}
       </nav>
     </header>
   )
