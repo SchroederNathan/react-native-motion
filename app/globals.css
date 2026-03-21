@@ -1,26 +1,73 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-display: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-sans: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  --color-taupe-50: oklch(98.6% 0.002 67.8);
+  --color-taupe-100: oklch(96% 0.002 17.2);
+  --color-taupe-200: oklch(92.2% 0.005 34.3);
+  --color-taupe-300: oklch(86.8% 0.007 39.5);
+  --color-taupe-400: oklch(71.4% 0.014 41.2);
+  --color-taupe-500: oklch(54.7% 0.021 43.1);
+  --color-taupe-600: oklch(43.8% 0.017 39.3);
+  --color-taupe-700: oklch(36.7% 0.016 35.7);
+  --color-taupe-800: oklch(26.8% 0.011 36.5);
+  --color-taupe-900: oklch(21.4% 0.009 43.1);
+  --color-taupe-950: oklch(14.7% 0.004 49.3);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer utilities {
+  .border-shadow {
+    box-shadow:
+      0px 0px 0px 1px oklch(from var(--color-taupe-950) l c h / 0.06),
+      0px 1px 2px -1px oklch(from var(--color-taupe-950) l c h / 0.06),
+      0px 2px 4px 0px oklch(from var(--color-taupe-950) l c h / 0.04);
+    transition-property: box-shadow;
+    transition-timing-function: ease;
+    transition-duration: 150ms;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  .border-shadow:hover,
+  .border-shadow:focus-within {
+    box-shadow:
+      0px 0px 0px 1px oklch(from var(--color-taupe-950) l c h / 0.08),
+      0px 1px 2px -1px oklch(from var(--color-taupe-950) l c h / 0.08),
+      0px 2px 4px 0px oklch(from var(--color-taupe-950) l c h / 0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .border-shadow {
+      box-shadow:
+        0px 0px 0px 1px oklch(from var(--color-taupe-200) l c h / 0.06),
+        0px 1px 2px -1px oklch(from var(--color-taupe-200) l c h / 0.06),
+        0px 2px 4px 0px oklch(from var(--color-taupe-200) l c h / 0.04);
+    }
+
+    .border-shadow:hover,
+    .border-shadow:focus-within {
+      box-shadow:
+        0px 0px 0px 1px oklch(from var(--color-taupe-200) l c h / 0.08),
+        0px 1px 2px -1px oklch(from var(--color-taupe-200) l c h / 0.08),
+        0px 2px 4px 0px oklch(from var(--color-taupe-200) l c h / 0.06);
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility image-outline {
+  box-shadow: inset 0 0 0 1px oklch(from var(--color-taupe-950) l c h / 0.1);
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--color-taupe-100);
+    --scroll-padding-top: 0;
+    scroll-padding-top: var(--scroll-padding-top);
+
+    @variant dark {
+      background-color: var(--color-taupe-950);
+    }
+  }
 }
