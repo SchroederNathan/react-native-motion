@@ -16,7 +16,7 @@ export default function Page() {
             <img
               alt=""
               src="/logo.svg"
-              className="h-4 w-auto"
+              className="h-4 w-auto invert dark:invert-0"
             />
 
           </NavbarLogo>
