@@ -12,12 +12,16 @@ export default function Page() {
         id="navbar"
         logo={
           <NavbarLogo href="#">
-            <span className="text-lg font-semibold text-taupe-950 dark:text-taupe-50">
-              React Native Motion
-            </span>
+            <span className="sr-only">Raect Native Motion</span>
+            <img
+              alt=""
+              src="/logo.svg"
+              className="h-4 w-auto"
+            />
+
           </NavbarLogo>
         }
-  
+
         actions={
           <>
             <PlainButtonLink href="https://github.com/SchroederNathan/react-native-motion" className="max-sm:hidden">
@@ -49,7 +53,7 @@ export default function Page() {
           subheadline={
             <p>
               Beautiful animations for React Native and Expo. <br />
-              Built for you or your agent to ship. 
+              Built for you or your agent to ship.
             </p>
           }
           cta={
