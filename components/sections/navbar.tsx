@@ -27,7 +27,7 @@ export function NavbarLink({
 }
 
 export function NavbarLogo({ className, href, ...props }: { href: string } & Omit<ComponentProps<'a'>, 'href'>) {
-  return <a href={href} {...props} className={clsx('inline-flex items-stretch', className)} />
+  return <a href={href} {...props} className={clsx('relative inline-flex items-stretch after:absolute after:inset-0 after:-inset-y-2 after:-inset-x-2 after:content-[""]', className)} />
 }
 
 export function Navbar({
@@ -43,7 +43,7 @@ export function Navbar({
 } & ComponentProps<'header'>) {
 
   return (
-    <header className={clsx('sticky top-0 z-10 bg-taupe-100 dark:bg-taupe-950', className)} {...props}>
+    <header className={clsx('blur-fade-in sticky top-0 z-10 bg-taupe-100 dark:bg-taupe-950', className)} {...props}>
       <style>{`:root { --scroll-padding-top: 5.25rem }`}</style>
       <nav>
         <div className="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">

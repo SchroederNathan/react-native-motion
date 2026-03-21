@@ -1,8 +1,45 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/redaction/redaction-35-latin-400-normal.woff2') format('woff2'),
+       url('/fonts/redaction/redaction-35-latin-400-normal.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/redaction/redaction-35-latin-400-italic.woff2') format('woff2'),
+       url('/fonts/redaction/redaction-35-latin-400-italic.woff') format('woff');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/redaction/redaction-35-latin-700-normal.woff2') format('woff2'),
+       url('/fonts/redaction/redaction-35-latin-700-normal.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Redaction 35';
+  src: url('/fonts/redaction/redaction-35-latin-700-italic.woff2') format('woff2'),
+       url('/fonts/redaction/redaction-35-latin-700-italic.woff') format('woff');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 @theme {
-  --font-display: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-sans: var(--font-plus-jakarta-sans), 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: var(--font-manrope), 'Manrope', system-ui, sans-serif;
+  --font-sans: var(--font-manrope), 'Manrope', system-ui, sans-serif;
+  --font-redaction: 'Redaction 35', serif;
 
   --color-taupe-50: oklch(98.6% 0.002 67.8);
   --color-taupe-100: oklch(96% 0.002 17.2);
@@ -56,6 +93,23 @@
 
 @utility image-outline {
   box-shadow: inset 0 0 0 1px oklch(from var(--color-taupe-950) l c h / 0.1);
+}
+
+@keyframes blur-fade-in-up {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
+@utility blur-fade-in {
+  animation: blur-fade-in-up 0.6s ease-out both;
 }
 
 @layer base {

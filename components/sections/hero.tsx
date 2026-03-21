@@ -26,13 +26,14 @@ export function Hero({
       <Container className="flex flex-col gap-16">
         <div className="flex flex-col items-center gap-32">
           <div className="flex flex-col items-start sm:items-center gap-6">
-            {eyebrow}
-            <Heading className="max-w-5xl text-start sm:text-center">{headline}</Heading>
-            <Text size="lg" className="flex max-w-3xl flex-col gap-4 text-start sm:text-center">
+            <div className="blur-fade-in" style={{ animationDelay: '0ms' }}>{eyebrow}</div>
+            <Heading className="max-w-5xl text-start sm:text-center font-medium">{headline}</Heading>
+            <Text size="lg" className="blur-fade-in flex max-w-3xl flex-col gap-4 text-start sm:text-center" style={{ animationDelay: '300ms' }}>
               {subheadline}
             </Text>
-            
-            {cta}
+            <div className="blur-fade-in" style={{ animationDelay: '400ms' }}>
+              {cta}
+            </div>
           </div>
           {demo}
         </div>

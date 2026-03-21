@@ -1,9 +1,9 @@
 import { AnnouncementBadge } from '@/components/elements/announcement-badge'
 import { ButtonLink, PlainButtonLink } from '@/components/elements/button'
-import { SearchInput } from '@/components/elements/search-input'
 import { Main } from '@/components/elements/main'
+import { SearchInput } from '@/components/elements/search-input'
 import { Hero } from '@/components/sections/hero'
-import { Navbar, NavbarLink, NavbarLogo } from '@/components/sections/navbar'
+import { Navbar, NavbarLogo } from '@/components/sections/navbar'
 
 export default function Page() {
   return (
@@ -49,7 +49,13 @@ export default function Page() {
               badgeText="New"
             />
           }
-          headline="React Native Motion"
+          headline={
+            <>
+              <span className="inline-block blur-fade-in" style={{ animationDelay: '100ms' }}>React</span>{' '}
+              <span className="inline-block blur-fade-in" style={{ animationDelay: '150ms' }}>Native</span>{' '}
+              <span className="inline-block blur-fade-in font-redaction italic" style={{ animationDelay: '200ms' }}>Motion</span>
+            </>
+          }
           subheadline={
             <p>
               Beautiful animations for React Native and Expo. <br />

@@ -40,7 +40,7 @@ export function AnnouncementBadge({
   return (
     <motion.a
       href={href}
-      whileTap={{ scale: 0.97 }}
+      whileTap={{ scale: 0.96 }}
       transition={tapTransition}
       {...props}
       className={clsx(
