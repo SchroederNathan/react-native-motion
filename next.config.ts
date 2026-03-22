@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   pageExtensions: ["js", "jsx", "mdx", "ts", "tsx"],
 };
 
-const withMDX = createMDX({});
+const withMDX = createMDX({
+  options: {
+    rehypePlugins: ["@mapbox/rehype-prism"],
+  },
+});
 
 export default withMDX(nextConfig);

@@ -13,7 +13,7 @@ export function AnimationsGrid({ animations }: { animations: AnimationMeta[] }) 
               className="blur-fade-in"
               style={{ animationDelay: `${500 + i * 100}ms` }}
             >
-              <AnimationCard animation={animation} />
+              <AnimationCard animation={animation} index={i} />
             </div>
           ))}
         </div>

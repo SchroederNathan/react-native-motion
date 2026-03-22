@@ -8,12 +8,12 @@ import type { AnimationMeta } from '@/lib/animations'
 const tapTransition = { type: 'spring' as const, duration: 0.5, bounce: 0 }
 const hoverBgTransition = { type: 'spring' as const, duration: 0.3, bounce: 0 }
 
-export function AnimationCard({ animation }: { animation: AnimationMeta }) {
+export function AnimationCard({ animation, index = 0 }: { animation: AnimationMeta; index?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLAnchorElement>(null)
   const isHovered = useRef(false)
   const [hovered, setHovered] = useState(false)
-  const inView = useInView(containerRef, { amount: 0.5 })
+  const inView = useInView(containerRef, { amount: 0.3 })
 
   const tryPlay = useCallback(() => {
     const video = videoRef.current
@@ -27,6 +27,13 @@ export function AnimationCard({ animation }: { animation: AnimationMeta }) {
     video.pause()
     video.currentTime = 0
   }, [])
+
+  // Autoplay first card on mount (for mobile)
+  useEffect(() => {
+    if (index === 0) {
+      tryPlay()
+    }
+  }, [index, tryPlay])
 
   useEffect(() => {
     if (inView) {
@@ -76,6 +83,7 @@ export function AnimationCard({ animation }: { animation: AnimationMeta }) {
           muted
           loop
           playsInline
+          preload="metadata"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="pointer-events-none absolute inset-0 rounded-xl image-outline" />

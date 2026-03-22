@@ -1,5 +1,6 @@
 import type { MDXComponents } from 'mdx/types'
 import { VideoDemo } from '@/components/elements/video-demo'
+import { CodeBlock } from '@/components/elements/code-block'
 
 export function useMDXComponents(): MDXComponents {
   return {
@@ -45,16 +46,17 @@ export function useMDXComponents(): MDXComponents {
     li: ({ children }) => (
       <li className="text-base/7">{children}</li>
     ),
-    code: ({ children }) => (
-      <code className="rounded-md bg-taupe-950/5 px-1.5 py-0.5 text-sm font-mono text-taupe-800 dark:bg-taupe-50/10 dark:text-taupe-200">
-        {children}
-      </code>
-    ),
-    pre: ({ children }) => (
-      <pre className="overflow-x-auto rounded-xl bg-taupe-900 dark:bg-taupe-900 p-4 text-sm text-taupe-100 mb-4">
-        {children}
-      </pre>
-    ),
+    code: ({ children, className, ...props }) =>
+      className ? (
+        <code className={`${className} font-mono leading-6`} {...props}>
+          {children}
+        </code>
+      ) : (
+        <code className="rounded-md bg-taupe-950/5 px-1.5 py-0.5 text-sm font-mono text-taupe-800 dark:bg-taupe-50/10 dark:text-taupe-200">
+          {children}
+        </code>
+      ),
+    pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
     blockquote: ({ children }) => (
       <blockquote className="border-l-2 border-taupe-300 dark:border-taupe-700 pl-4 my-4 text-taupe-600 dark:text-taupe-400 italic">
         {children}

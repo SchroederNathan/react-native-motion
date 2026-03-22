@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./prism.css" layer(components);
 
 @font-face {
   font-family: 'Redaction 35';

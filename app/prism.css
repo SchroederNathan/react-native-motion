@@ -1,0 +1,57 @@
+pre[class*='language-'] {
+  color: var(--color-taupe-100);
+}
+
+
+.token.tag,
+.token.class-name,
+.token.selector,
+.token.selector .class,
+.token.selector.class,
+.token.function {
+  color: oklch(75% 0.15 350);
+}
+
+.token.attr-name,
+.token.keyword,
+.token.rule,
+.token.pseudo-class,
+.token.important {
+  color: var(--color-taupe-300);
+}
+
+.token.module {
+  color: oklch(75% 0.15 350);
+}
+
+.token.attr-value,
+.token.class,
+.token.string,
+.token.property {
+  color: oklch(78% 0.1 175);
+}
+
+.token.punctuation,
+.token.attr-equals {
+  color: var(--color-taupe-500);
+}
+
+.token.unit,
+.language-css .token.function {
+  color: oklch(82% 0.08 220);
+}
+
+.token.comment,
+.token.operator,
+.token.combinator {
+  color: var(--color-taupe-400);
+}
+
+.token.number,
+.token.boolean {
+  color: oklch(78% 0.12 60);
+}
+
+.token.regex {
+  color: oklch(78% 0.1 175);
+}
