@@ -76,7 +76,7 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
         }}
         transition={hoverBgTransition}
       />
-      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-taupe-200/50 dark:bg-taupe-800/50">
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-taupe-200">
         <video
           ref={videoRef}
           src={animation.video}
