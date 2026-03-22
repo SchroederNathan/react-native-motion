@@ -76,7 +76,7 @@ export default async function Page() {
       </Main>
 
       <div className="relative">
-        <div className="pointer-events-none absolute inset-0 -top-64 -z-10" style={{ opacity: 0.1 }}>
+        <div className="pointer-events-none absolute inset-0 -top-72 -z-10" style={{ opacity: 0.1 }}>
           <Dither
             waveColor={[0.9, 0.9, 0.9]}
             disableAnimation={false}
