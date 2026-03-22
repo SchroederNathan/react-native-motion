@@ -1,15 +1,18 @@
 import Dither from '@/components/effects/dither'
 import { AnnouncementBadge } from '@/components/elements/announcement-badge'
 import { Main } from '@/components/elements/main'
-import { SearchInput } from '@/components/elements/search-input'
-import { AnimationsGrid } from '@/components/sections/animations-grid'
+import {
+  AnimationSearchProvider,
+  AnimationSearchInput,
+  FilteredAnimationsGrid,
+} from '@/components/sections/searchable-animations-grid'
 import { Hero } from '@/components/sections/hero'
 import { getAllAnimationMetas } from '@/lib/animations'
 
 export default async function Page() {
   const animations = await getAllAnimationMetas()
   return (
-    <>
+    <AnimationSearchProvider>
       <Main>
         <Hero
           id="hero"
@@ -34,13 +37,13 @@ export default async function Page() {
             </p>
           }
           cta={
-            <SearchInput className="min-w-xs" />
+            <AnimationSearchInput className="min-w-xs" />
           }
         />
       </Main>
 
       <div className="relative">
-        <div className="pointer-events-none absolute inset-0 -top-[48rem] sm:-top-72 -z-10" style={{ opacity: 0.1 }}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-screen -translate-y-72" style={{ opacity: 0.1 }}>
           <Dither
             waveColor={[0.9, 0.9, 0.9]}
             disableAnimation={false}
@@ -53,8 +56,8 @@ export default async function Page() {
             waveSpeed={0.03}
           />
         </div>
-        <AnimationsGrid animations={animations} />
+        <FilteredAnimationsGrid animations={animations} />
       </div>
-    </>
+    </AnimationSearchProvider>
   )
 }

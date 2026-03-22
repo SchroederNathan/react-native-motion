@@ -1,3 +1,5 @@
+'use client'
+
 import { Container } from '@/components/elements/container'
 import { AnimationCard } from '@/components/elements/animation-card'
 import type { AnimationMeta } from '@/lib/animations'

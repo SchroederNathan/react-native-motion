@@ -1,6 +1,6 @@
 export function Footer() {
   return (
-    <footer className="bg-taupe-100 dark:bg-taupe-950">
+    <footer>
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-8 lg:px-10">
         <p className="text-sm/6 text-taupe-500 dark:text-taupe-400">
           Made by{' '}
