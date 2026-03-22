@@ -51,7 +51,7 @@ export function Navbar({
             <div className="flex items-center">{logo}</div>
             <div className="flex gap-8 max-lg:hidden">{links}</div>
           </div>
-          <div className="flex shrink-0 items-center gap-5">{actions}</div>
+          <div className="flex shrink-0 items-center gap-4">{actions}</div>
 
         </div>
 

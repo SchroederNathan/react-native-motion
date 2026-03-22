@@ -9,7 +9,7 @@ export function VideoDemo({
   ...props
 }: { src: string } & Omit<ComponentProps<'video'>, 'src'>) {
   return (
-    <div className={clsx('relative aspect-square overflow-hidden rounded-2xl my-6', className)}>
+    <div className={clsx('relative aspect-square overflow-hidden rounded-2xl', className)}>
       <video
         src={src}
         autoPlay
