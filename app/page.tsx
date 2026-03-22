@@ -3,10 +3,13 @@ import { AnnouncementBadge } from '@/components/elements/announcement-badge'
 import { ButtonLink, PlainButtonLink } from '@/components/elements/button'
 import { Main } from '@/components/elements/main'
 import { SearchInput } from '@/components/elements/search-input'
+import { AnimationsGrid } from '@/components/sections/animations-grid'
 import { Hero } from '@/components/sections/hero'
 import { Navbar, NavbarLogo } from '@/components/sections/navbar'
+import { getAllAnimationMetas } from '@/lib/animations'
 
-export default function Page() {
+export default async function Page() {
+  const animations = await getAllAnimationMetas()
   return (
     <>
       <Navbar
@@ -69,23 +72,21 @@ export default function Page() {
         />
       </Main>
 
-      <div style={{
-        width: '100%',
-        opacity: 0.1,
-        height: '1000px',
-        position: 'relative',
-      }}>
-        <Dither
-          waveColor={[0.9, 0.9, 0.9]}
-          disableAnimation={false}
-          enableMouseInteraction
-          mouseRadius={0.1}
-          colorNum={3}
-          pixelSize={6}
-          waveAmplitude={0}
-          waveFrequency={2.5}
-          waveSpeed={0.03}
-        />
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-0 -top-64 -z-10" style={{ opacity: 0.1 }}>
+          <Dither
+            waveColor={[0.9, 0.9, 0.9]}
+            disableAnimation={false}
+            enableMouseInteraction={false}
+            mouseRadius={0.1}
+            colorNum={3}
+            pixelSize={6}
+            waveAmplitude={0}
+            waveFrequency={2.5}
+            waveSpeed={0.03}
+          />
+        </div>
+        <AnimationsGrid animations={animations} />
       </div>
     </>
   )
