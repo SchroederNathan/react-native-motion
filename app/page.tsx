@@ -7,6 +7,7 @@ import { AnimationsGrid } from '@/components/sections/animations-grid'
 import { Hero } from '@/components/sections/hero'
 import { Navbar, NavbarLogo } from '@/components/sections/navbar'
 import { getAllAnimationMetas } from '@/lib/animations'
+import Image from 'next/image'
 
 export default async function Page() {
   const animations = await getAllAnimationMetas()
@@ -17,9 +18,11 @@ export default async function Page() {
         logo={
           <NavbarLogo href="#">
             <span className="sr-only">Raect Native Motion</span>
-            <img
+            <Image
               alt=""
               src="/logo.svg"
+              width={64}
+              height={16}
               className="h-4 w-auto invert dark:invert-0"
             />
 

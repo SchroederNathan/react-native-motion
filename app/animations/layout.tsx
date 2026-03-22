@@ -1,6 +1,7 @@
 import { ButtonLink, PlainButtonLink } from '@/components/elements/button'
 import { Container } from '@/components/elements/container'
 import { Navbar, NavbarLogo } from '@/components/sections/navbar'
+import Image from 'next/image'
 
 export default function AnimationsLayout({
   children,
@@ -13,9 +14,11 @@ export default function AnimationsLayout({
         logo={
           <NavbarLogo href="/">
             <span className="sr-only">React Native Motion</span>
-            <img
+            <Image
               alt=""
               src="/logo.svg"
+              width={64}
+              height={16}
               className="h-4 w-auto invert dark:invert-0"
             />
           </NavbarLogo>

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/refs -- Three.js uniforms require mutable refs accessed during render (standard R3F pattern) */
 "use client"
  
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -160,9 +161,9 @@ void mainImage(in vec4 inputColor, in vec2 uv, out vec4 outputColor) {
 `;
 
 class RetroEffectImpl extends Effect {
-    public uniforms: Map<string, THREE.Uniform<any>>;
+    public uniforms: Map<string, THREE.Uniform<number>>;
     constructor() {
-        const uniforms = new Map<string, THREE.Uniform<any>>([
+        const uniforms = new Map<string, THREE.Uniform<number>>([
             ['colorNum', new THREE.Uniform(4.0)],
             ['pixelSize', new THREE.Uniform(2.0)]
         ]);
@@ -183,16 +184,17 @@ class RetroEffectImpl extends Effect {
     }
 }
 
+const WrappedRetroEffect = wrapEffect(RetroEffectImpl);
+
 const RetroEffect = forwardRef<RetroEffectImpl, { colorNum: number; pixelSize: number }>((props, ref) => {
     const { colorNum, pixelSize } = props;
-    const WrappedRetroEffect = wrapEffect(RetroEffectImpl);
     return <WrappedRetroEffect ref={ref} colorNum={colorNum} pixelSize={pixelSize} />;
 });
 
 RetroEffect.displayName = 'RetroEffect';
 
 interface WaveUniforms {
-    [key: string]: THREE.Uniform<any>;
+    [key: string]: THREE.Uniform<number | THREE.Vector2 | THREE.Color>;
     time: THREE.Uniform<number>;
     resolution: THREE.Uniform<THREE.Vector2>;
     waveSpeed: THREE.Uniform<number>;
@@ -246,31 +248,39 @@ function DitheredWaves({
         return () => window.removeEventListener('pointermove', handleGlobalPointerMove);
     }, [enableMouseInteraction, gl]);
 
-    const waveUniformsRef = useRef<WaveUniforms>({
-        time: new THREE.Uniform(0),
-        resolution: new THREE.Uniform(new THREE.Vector2(0, 0)),
-        waveSpeed: new THREE.Uniform(waveSpeed),
-        waveFrequency: new THREE.Uniform(waveFrequency),
-        waveAmplitude: new THREE.Uniform(waveAmplitude),
-        waveColor: new THREE.Uniform(new THREE.Color(...waveColor)),
-        mousePos: new THREE.Uniform(new THREE.Vector2(0, 0)),
-        enableMouseInteraction: new THREE.Uniform(enableMouseInteraction ? 1 : 0),
-        mouseRadius: new THREE.Uniform(mouseRadius)
-    });
+    // THREE.js uniforms are mutable objects that must be mutated in useFrame —
+    // this is the standard R3F pattern. The ref is read during render to pass
+    // the stable uniforms object to <shaderMaterial>, which is safe here because
+    // the object identity never changes after initialization.
+    const waveUniformsRef = useRef<WaveUniforms>(null);
+    if (waveUniformsRef.current === null) {
+        waveUniformsRef.current = {
+            time: new THREE.Uniform(0),
+            resolution: new THREE.Uniform(new THREE.Vector2(0, 0)),
+            waveSpeed: new THREE.Uniform(waveSpeed),
+            waveFrequency: new THREE.Uniform(waveFrequency),
+            waveAmplitude: new THREE.Uniform(waveAmplitude),
+            waveColor: new THREE.Uniform(new THREE.Color(...waveColor)),
+            mousePos: new THREE.Uniform(new THREE.Vector2(0, 0)),
+            enableMouseInteraction: new THREE.Uniform(enableMouseInteraction ? 1 : 0),
+            mouseRadius: new THREE.Uniform(mouseRadius)
+        };
+    }
+    const waveUniforms = waveUniformsRef.current;
 
     useEffect(() => {
         const dpr = gl.getPixelRatio();
         const newWidth = Math.floor(size.width * dpr);
         const newHeight = Math.floor(size.height * dpr);
-        const currentRes = waveUniformsRef.current.resolution.value;
+        const currentRes = waveUniforms.resolution.value;
         if (currentRes.x !== newWidth || currentRes.y !== newHeight) {
             currentRes.set(newWidth, newHeight);
         }
-    }, [size, gl]);
+    }, [size, gl]); // eslint-disable-line react-hooks/exhaustive-deps -- waveUniforms is a stable mutable object
 
     const prevColor = useRef([...waveColor]);
     useFrame(({ clock }) => {
-        const u = waveUniformsRef.current;
+        const u = waveUniforms;
 
         if (!disableAnimation) {
             u.time.value = clock.getElapsedTime();
@@ -300,7 +310,7 @@ function DitheredWaves({
                 <shaderMaterial
                     vertexShader={waveVertexShader}
                     fragmentShader={waveFragmentShader}
-                    uniforms={waveUniformsRef.current}
+                    uniforms={waveUniforms}
                 />
             </mesh>
 
