@@ -3,7 +3,10 @@
 import { clsx } from 'clsx/lite'
 import { motion, useInView } from 'motion/react'
 import { useRef, useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import type { AnimationMeta } from '@/lib/animations'
+
+const MotionLink = motion.create(Link)
 
 const tapTransition = { type: 'spring' as const, duration: 0.5, bounce: 0 }
 const hoverBgTransition = { type: 'spring' as const, duration: 0.3, bounce: 0 }
@@ -44,7 +47,7 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
   }, [inView, tryPlay, tryPause])
 
   return (
-    <motion.a
+    <MotionLink
       ref={containerRef}
       href={`/animations/${animation.slug}`}
       whileTap={{ scale: 0.96 }}
@@ -96,6 +99,6 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
           {animation.description}
         </p>
       </div>
-    </motion.a>
+    </MotionLink>
   )
 }

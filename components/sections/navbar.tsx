@@ -1,14 +1,15 @@
 import { clsx } from 'clsx/lite'
 import { type ComponentProps, type ReactNode } from 'react'
+import Link from 'next/link'
 
 export function NavbarLink({
   children,
   href,
   className,
   ...props
-}: { href: string } & Omit<ComponentProps<'a'>, 'href'>) {
+}: { href: string } & Omit<ComponentProps<typeof Link>, 'href'>) {
   return (
-    <a
+    <Link
       href={href}
       className={clsx(
         'group inline-flex items-center justify-between gap-2 text-3xl/10 font-medium text-taupe-950 lg:text-sm/7 dark:text-taupe-50',
@@ -22,12 +23,12 @@ export function NavbarLink({
           <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
         </svg>
       </span>
-    </a>
+    </Link>
   )
 }
 
-export function NavbarLogo({ className, href, ...props }: { href: string } & Omit<ComponentProps<'a'>, 'href'>) {
-  return <a href={href} {...props} className={clsx('relative inline-flex items-center after:absolute after:inset-0 after:-inset-y-2 after:-inset-x-2 after:content-[""]', className)} />
+export function NavbarLogo({ className, href, ...props }: { href: string } & Omit<ComponentProps<typeof Link>, 'href'>) {
+  return <Link href={href} {...props} className={clsx('relative inline-flex items-center after:absolute after:inset-0 after:-inset-y-2 after:-inset-x-2 after:content-[""]', className)} />
 }
 
 export function Navbar({
