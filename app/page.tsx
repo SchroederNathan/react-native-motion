@@ -1,3 +1,4 @@
+import Dither from '@/components/effects/dither'
 import { AnnouncementBadge } from '@/components/elements/announcement-badge'
 import { ButtonLink, PlainButtonLink } from '@/components/elements/button'
 import { Main } from '@/components/elements/main'
@@ -67,6 +68,25 @@ export default function Page() {
           }
         />
       </Main>
+
+      <div style={{
+        width: '100%',
+        opacity: 0.1,
+        height: '1000px',
+        position: 'relative',
+      }}>
+        <Dither
+          waveColor={[0.9, 0.9, 0.9]}
+          disableAnimation={false}
+          enableMouseInteraction
+          mouseRadius={0.1}
+          colorNum={3}
+          pixelSize={6}
+          waveAmplitude={0}
+          waveFrequency={2.5}
+          waveSpeed={0.03}
+        />
+      </div>
     </>
   )
 }
