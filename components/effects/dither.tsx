@@ -1,6 +1,6 @@
 "use client"
-/* eslint-disable react/no-unknown-property */
-import { Canvas, ThreeEvent, useFrame, useThree } from '@react-three/fiber';
+ 
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { EffectComposer, wrapEffect } from '@react-three/postprocessing';
 import { Effect } from 'postprocessing';
 import { forwardRef, useEffect, useMemo, useRef } from 'react';
@@ -231,6 +231,21 @@ function DitheredWaves({
     const mouseRef = useRef(new THREE.Vector2());
     const { viewport, size, gl } = useThree();
 
+    // Track mouse globally so the effect works even under overlapping content
+    useEffect(() => {
+        if (!enableMouseInteraction) return;
+        const handleGlobalPointerMove = (e: PointerEvent) => {
+            const rect = gl.domElement.getBoundingClientRect();
+            const dpr = gl.getPixelRatio();
+            mouseRef.current.set(
+                (e.clientX - rect.left) * dpr,
+                (e.clientY - rect.top) * dpr
+            );
+        };
+        window.addEventListener('pointermove', handleGlobalPointerMove);
+        return () => window.removeEventListener('pointermove', handleGlobalPointerMove);
+    }, [enableMouseInteraction, gl]);
+
     const waveUniformsRef = useRef<WaveUniforms>({
         time: new THREE.Uniform(0),
         resolution: new THREE.Uniform(new THREE.Vector2(0, 0)),
@@ -278,13 +293,6 @@ function DitheredWaves({
         }
     });
 
-    const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
-        if (!enableMouseInteraction) return;
-        const rect = gl.domElement.getBoundingClientRect();
-        const dpr = gl.getPixelRatio();
-        mouseRef.current.set((e.clientX - rect.left) * dpr, (e.clientY - rect.top) * dpr);
-    };
-
     return (
         <>
             <mesh ref={mesh} scale={[viewport.width, viewport.height, 1]}>
@@ -299,16 +307,6 @@ function DitheredWaves({
             <EffectComposer>
                 <RetroEffect colorNum={colorNum} pixelSize={pixelSize} />
             </EffectComposer>
-
-            <mesh
-                onPointerMove={handlePointerMove}
-                position={[0, 0, 0.01]}
-                scale={[viewport.width, viewport.height, 1]}
-                visible={false}
-            >
-                <planeGeometry args={[1, 1]} />
-                <meshBasicMaterial transparent opacity={0} />
-            </mesh>
         </>
     );
 }

@@ -77,7 +77,7 @@ export default async function Page() {
           <Dither
             waveColor={[0.9, 0.9, 0.9]}
             disableAnimation={false}
-            enableMouseInteraction={false}
+            enableMouseInteraction={true}
             mouseRadius={0.1}
             colorNum={3}
             pixelSize={6}

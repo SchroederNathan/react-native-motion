@@ -2,15 +2,17 @@
 
 import { clsx } from 'clsx/lite'
 import { motion, useInView } from 'motion/react'
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import type { AnimationMeta } from '@/lib/animations'
 
 const tapTransition = { type: 'spring' as const, duration: 0.5, bounce: 0 }
+const hoverBgTransition = { type: 'spring' as const, duration: 0.3, bounce: 0 }
 
 export function AnimationCard({ animation }: { animation: AnimationMeta }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLAnchorElement>(null)
   const isHovered = useRef(false)
+  const [hovered, setHovered] = useState(false)
   const inView = useInView(containerRef, { amount: 0.5 })
 
   const tryPlay = useCallback(() => {
@@ -42,21 +44,31 @@ export function AnimationCard({ animation }: { animation: AnimationMeta }) {
       transition={tapTransition}
       className={clsx(
         'group relative flex flex-col gap-3 rounded-2xl p-3',
-        'transition-[box-shadow,background-color] duration-150 ease-out',
-        'hover:bg-taupe-950/[0.03] dark:hover:bg-taupe-50/[0.03]',
+        'transition-shadow duration-150 ease-out',
         'hover:border-shadow',
       )}
       onMouseEnter={() => {
         isHovered.current = true
+        setHovered(true)
         tryPlay()
       }}
       onMouseLeave={() => {
         isHovered.current = false
+        setHovered(false)
         if (!inView) {
           tryPause()
         }
       }}
     >
+      <motion.div
+        className="pointer-events-none absolute inset-0 rounded-2xl bg-taupe-950/5 dark:bg-taupe-50/10"
+        initial={false}
+        animate={{
+          scale: hovered ? 1 : 0.92,
+          opacity: hovered ? 1 : 0,
+        }}
+        transition={hoverBgTransition}
+      />
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-taupe-200/50 dark:bg-taupe-800/50">
         <video
           ref={videoRef}
