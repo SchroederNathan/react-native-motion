@@ -46,10 +46,9 @@ export function Navbar({
 } & ComponentProps<'header'>) {
 
   return (
-    <header className={clsx('sticky top-0 z-10 bg-taupe-100 dark:bg-taupe-950', animate && 'blur-fade-in', className)} {...props}>
-      <style>{`:root { --scroll-padding-top: 5.25rem }`}</style>
+    <header className={clsx('bg-taupe-100 dark:bg-taupe-950', animate && 'blur-fade-in', className)} {...props}>
       <nav>
-        <div className="mx-auto flex h-(--scroll-padding-top) max-w-7xl items-center gap-4 px-6 lg:px-10">
+        <div className="mx-auto flex h-[5.25rem] max-w-7xl items-center gap-4 px-6 lg:px-10">
           <div className="flex flex-1 items-center gap-12">
             <div className="flex items-center">{logo}</div>
             <div className="flex gap-8 max-lg:hidden">{links}</div>
