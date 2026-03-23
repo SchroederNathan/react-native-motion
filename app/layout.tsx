@@ -24,6 +24,17 @@ export const metadata: Metadata = {
     apple: "/favicons/apple-touch-icon.png",
   },
   manifest: "/favicons/site.webmanifest",
+  openGraph: {
+    title: "React Native Motion",
+    description: "Beautiful animations for React Native and Expo.",
+    images: [{ url: "/og-image.png", width: 2400, height: 1260 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "React Native Motion",
+    description: "Beautiful animations for React Native and Expo.",
+    images: ["/og-image.png"],
+  },
 };
 
 export default function RootLayout({
