@@ -39,7 +39,7 @@ export default async function AnimationPage({
         <PromptActionsClient />
       </div>
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 lg:items-stretch mb-12">
-        <div className="lg:w-1/2 lg:shrink-0 self-start">
+        <div className="w-full lg:w-1/2 lg:shrink-0 lg:self-start">
           <VideoDemo src={meta.video} className="my-0" />
         </div>
         <div className="min-w-0 flex-1 flex flex-col self-stretch">

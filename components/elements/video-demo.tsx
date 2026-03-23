@@ -30,7 +30,12 @@ export function VideoDemo({
   }, [src])
 
   return (
-    <div className={clsx('relative aspect-square overflow-hidden rounded-2xl bg-taupe-200', className)}>
+    <div
+      className={clsx(
+        'relative w-full aspect-square overflow-hidden rounded-2xl bg-taupe-200',
+        className,
+      )}
+    >
       <video
         ref={videoRef}
         src={src}
