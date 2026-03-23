@@ -104,6 +104,13 @@ export async function generateMetadata({
   return {
     title: `${meta.title} - React Native Motion`,
     description: meta.description,
+    alternates: {
+      canonical: `/animations/${slug}`,
+    },
+    openGraph: {
+      title: `${meta.title} - React Native Motion`,
+      description: meta.description,
+    },
   }
 }
 

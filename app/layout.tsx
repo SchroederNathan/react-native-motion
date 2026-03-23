@@ -13,8 +13,12 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://reactnativemotion.dev"),
   title: "React Native Motion",
-  description: "Beautiful animations for React Native",
+  description: "Beautiful animations for React Native and Expo.",
+  alternates: {
+    canonical: "/",
+  },
   icons: {
     icon: [
       { url: "/favicons/favicon-32x32.png", sizes: "32x32", type: "image/png" },
