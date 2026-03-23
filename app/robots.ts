@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/og'],
     },
-    sitemap: 'https://reactnativemotion.dev/sitemap.xml',
+    sitemap: 'https://rnmotion.dev/sitemap.xml',
   }
 }

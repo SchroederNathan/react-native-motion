@@ -5,7 +5,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const slugs = getAllAnimationSlugs()
 
   const animationPages = slugs.map((slug) => ({
-    url: `https://reactnativemotion.dev/animations/${slug}`,
+    url: `https://rnmotion.dev/animations/${slug}`,
     lastModified: new Date(),
     changeFrequency: 'monthly' as const,
     priority: 0.8,
@@ -13,7 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     {
-      url: 'https://reactnativemotion.dev',
+      url: 'https://rnmotion.dev',
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
