@@ -5,6 +5,7 @@ import { ButtonLink } from "@/components/elements/button";
 import { Navbar, NavbarLogo } from "@/components/sections/navbar";
 import { Footer } from "@/components/sections/footer";
 import { LogoMark } from "@/components/elements/logo-mark";
+import { ScrollRestoration } from "@/components/elements/scroll-restoration";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -39,7 +40,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <Navbar
           logo={
-            <NavbarLogo className="group" href="/">
+            <NavbarLogo className="group" href="/" scroll={false}>
               <span className="sr-only">React Native Motion</span>
               <LogoMark className="h-4 w-auto shrink-0 text-taupe-800 group-hover:text-taupe-900 dark:text-taupe-300 dark:group-hover:text-taupe-200" />
             </NavbarLogo>
@@ -62,6 +63,7 @@ export default function RootLayout({
             </>
           }
         />
+        <ScrollRestoration />
         {children}
         <Footer />
         <Analytics />

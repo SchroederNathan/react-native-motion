@@ -1,5 +1,6 @@
 import Dither from '@/components/effects/dither'
 import { AnnouncementBadge } from '@/components/elements/announcement-badge'
+import { FirstLoadOnly } from '@/components/elements/first-load-only'
 import { Main } from '@/components/elements/main'
 import {
   AnimationSearchProvider,
@@ -13,6 +14,7 @@ export default async function Page() {
   const animations = await getAllAnimationMetas()
   return (
     <AnimationSearchProvider>
+      <FirstLoadOnly />
       <Main>
         <Hero
           id="hero"
@@ -43,7 +45,11 @@ export default async function Page() {
       </Main>
 
       <div className="relative">
-        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-screen -translate-y-72" style={{ opacity: 0.1 }}>
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-screen -translate-y-72 animate-[fade-in_1.5s_ease-out_forwards]"
+          style={{ opacity: 0 }}
+        >
+          <div style={{ opacity: 0.1 }} className="h-full w-full">
           <Dither
             waveColor={[0.9, 0.9, 0.9]}
             disableAnimation={false}
@@ -55,6 +61,7 @@ export default async function Page() {
             waveFrequency={2.5}
             waveSpeed={0.03}
           />
+          </div>
         </div>
         <FilteredAnimationsGrid animations={animations} />
       </div>

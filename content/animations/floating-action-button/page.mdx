@@ -1,0 +1,39 @@
+export const meta = {
+  title: 'Floating Action Button',
+  slug: 'floating-action-button',
+  description: 'An expandable FAB that fans out action items with staggered springs.',
+  video: '/videos/gallery-carousel.mp4',
+  tags: ['fab', 'button', 'spring', 'stagger'],
+}
+
+## Overview
+
+The Floating Action Button expands to reveal a set of secondary actions arranged in an arc or vertical stack. Each action animates in with a staggered spring, and the main button rotates to indicate the open state.
+
+## Usage
+
+```jsx
+import { FloatingActionButton } from 'react-native-motion'
+
+export default function App() {
+  return (
+    <FloatingActionButton
+      actions={[
+        { icon: 'camera', onPress: () => {} },
+        { icon: 'image', onPress: () => {} },
+        { icon: 'mic', onPress: () => {} },
+      ]}
+    />
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| actions | Action[] | required | Array of `{ icon, label?, onPress }` objects |
+| position | `'bottom-right' \| 'bottom-left'` | 'bottom-right' | FAB screen position |
+| spacing | number | 60 | Distance between expanded action items |
+| staggerDelay | number | 50 | Delay between each action's spring animation |
+| springConfig | SpringConfig | `{ damping: 12, stiffness: 180 }` | Spring configuration |

@@ -1,0 +1,38 @@
+export const meta = {
+  title: 'Pull to Refresh',
+  slug: 'pull-to-refresh',
+  description: 'A custom pull-to-refresh indicator with spring physics.',
+  video: '/videos/gallery-carousel.mp4',
+  tags: ['pull', 'refresh', 'spring', 'scroll'],
+}
+
+## Overview
+
+A custom pull-to-refresh animation that replaces the default platform indicator. A spinner scales and rotates as the user pulls down, with a spring snap when released past the activation threshold.
+
+## Usage
+
+```jsx
+import { PullToRefresh } from 'react-native-motion'
+
+export default function App() {
+  const onRefresh = async () => {
+    await fetchData()
+  }
+
+  return (
+    <PullToRefresh onRefresh={onRefresh}>
+      <ScrollContent />
+    </PullToRefresh>
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| onRefresh | `() => Promise<void>` | required | Async function called on refresh |
+| threshold | number | 80 | Pull distance to trigger refresh |
+| indicatorSize | number | 40 | Size of the refresh indicator |
+| springConfig | SpringConfig | `{ damping: 15, stiffness: 150 }` | Spring configuration |

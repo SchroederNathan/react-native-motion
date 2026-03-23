@@ -1,0 +1,36 @@
+export const meta = {
+  title: 'Flip Card',
+  slug: 'flip-card',
+  description: 'A card that flips between front and back faces with a 3D rotation.',
+  video: '/videos/gallery-carousel.mp4',
+  tags: ['flip', '3d', 'card', 'rotation'],
+}
+
+## Overview
+
+The Flip Card uses a 3D Y-axis rotation to toggle between a front and back face. The spring-driven rotation creates a satisfying physical feel, and `backfaceVisibility: 'hidden'` ensures only the active face is visible.
+
+## Usage
+
+```jsx
+import { FlipCard } from 'react-native-motion'
+
+export default function App() {
+  return (
+    <FlipCard
+      front={<Text>Front</Text>}
+      back={<Text>Back</Text>}
+    />
+  )
+}
+```
+
+## Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| front | ReactNode | required | Content shown on the front face |
+| back | ReactNode | required | Content shown on the back face |
+| flipped | boolean | false | Controlled flip state |
+| onFlip | `(flipped: boolean) => void` | - | Callback when flip state changes |
+| duration | number | 600 | Flip animation duration in ms |
