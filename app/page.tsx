@@ -37,7 +37,7 @@ export default async function Page() {
             </p>
           }
           cta={
-            <AnimationSearchInput className="min-w-xs" />
+            <AnimationSearchInput className="w-full min-w-0 sm:w-auto sm:min-w-xs" />
           }
         />
       </Main>

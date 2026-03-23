@@ -28,9 +28,9 @@ export function ButtonLink({
       whileTap={{ scale: 0.96 }}
       transition={tapTransition}
       className={clsx(
-        'inline-flex shrink-0 items-center justify-center gap-1 rounded-xl text-sm/7 font-medium border-shadow',
+        'inline-flex shrink-0 items-center justify-center gap-1 rounded-lg text-sm/7 font-medium border-shadow',
         color === 'dark/light' &&
-        'bg-taupe-700 text-taupe-50 hover:bg-taupe-800 dark:bg-taupe-300 dark:text-taupe-950 dark:hover:bg-taupe-200',
+        'bg-taupe-800 text-taupe-50 hover:bg-taupe-900 dark:bg-taupe-300 dark:text-taupe-950 dark:hover:bg-taupe-200',
         color === 'light' && 'bg-taupe-50 text-taupe-950 hover:bg-taupe-100 dark:bg-taupe-100 dark:hover:bg-taupe-50',
         sizes[size],
         className,

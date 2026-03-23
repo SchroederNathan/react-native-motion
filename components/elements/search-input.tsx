@@ -12,7 +12,7 @@ export function SearchInput({
   return (
     <div
       className={clsx(
-        'flex cursor-text items-center gap-3 rounded-xl bg-taupe-500/5 px-3 py-1.5 text-sm/7 border-shadow dark:bg-taupe-500/10 backdrop-blur-xl dark:inset-ring-1 dark:inset-ring-taupe-50/5',
+        'flex cursor-text items-center gap-3 rounded-lg bg-taupe-100/50 px-3 py-1.5 text-sm/7 border-shadow dark:bg-taupe-950/90 ',
         className,
       )}
       onClick={() => inputRef.current?.focus()}

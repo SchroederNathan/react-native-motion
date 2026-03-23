@@ -7,8 +7,30 @@ import { useParams } from 'next/navigation'
 import { useCallback, useRef, useState } from 'react'
 
 const buttonBase =
-  'inline-flex items-center justify-center text-sm/7 font-medium bg-taupe-700 text-taupe-50 hover:bg-taupe-800 dark:bg-taupe-300 dark:text-taupe-950 dark:hover:bg-taupe-200 cursor-pointer'
+  'inline-flex items-center justify-center text-sm/7 font-medium text-taupe-800 hover:text-taupe-900 dark:text-taupe-300 dark:hover:text-taupe-200 cursor-pointer'
 
+const menuPanelSpring = { type: 'spring' as const, duration: 0.25, bounce: 0 }
+
+const menuPanelVariants = {
+  initial: {
+    opacity: 0,
+    y: 4,
+    filter: 'blur(4px)',
+    transition: menuPanelSpring,
+  },
+  open: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: menuPanelSpring,
+  },
+  exit: {
+    opacity: 0,
+    y: -4,
+    filter: 'blur(4px)',
+    transition: menuPanelSpring,
+  },
+}
 
 export function PromptActions() {
   const { slug } = useParams<{ slug: string }>()
@@ -17,18 +39,41 @@ export function PromptActions() {
 
   const copyPrompt = useCallback(async () => {
     if (copied) return
-    const res = await fetch(`/api/animations/${slug}/md`)
-    if (!res.ok) return
-    const text = await res.text()
-    await navigator.clipboard.writeText(text)
-    setCopied(true)
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(() => setCopied(false), 2000)
+    try {
+      // Use ClipboardItem with a blob promise so the clipboard.write() call
+      // happens synchronously within the user gesture — required on Safari/mobile.
+      const blobPromise = fetch(`/api/animations/${slug}/md`)
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to fetch prompt')
+          return res.text()
+        })
+        .then((text) => new Blob([text], { type: 'text/plain' }))
+
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'text/plain': blobPromise }),
+      ])
+      setCopied(true)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback for browsers that don't support ClipboardItem with promises
+      try {
+        const res = await fetch(`/api/animations/${slug}/md`)
+        if (!res.ok) return
+        const text = await res.text()
+        await navigator.clipboard.writeText(text)
+        setCopied(true)
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => setCopied(false), 2000)
+      } catch {
+        // Silently fail — clipboard not available
+      }
+    }
   }, [copied, slug])
 
   return (
     <div
-      className="inline-flex items-stretch border-shadow rounded-xl"
+      className="inline-flex items-stretch border-shadow rounded-lg"
     >
       <motion.button
         type="button"
@@ -37,7 +82,7 @@ export function PromptActions() {
         transition={{ type: 'spring', duration: 0.4, bounce: 0.1 }}
         className={clsx(
           buttonBase,
-          'relative gap-1.5 rounded-l-xl px-3 py-1 border-r border-taupe-600/20 dark:border-taupe-950/20 overflow-hidden',
+          'relative gap-1.5 rounded-l-lg px-3 py-1 border-r border-taupe-950/10 dark:border-taupe-50/15 overflow-hidden',
         )}
       >
         <span className="relative size-4 shrink-0">
@@ -81,38 +126,47 @@ export function PromptActions() {
       </motion.button>
 
       <Menu as="div" className="relative flex">
-        <MenuButton
-          className={clsx(
-            buttonBase,
-            'rounded-r-xl px-2',
-          )}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            className="size-4"
-          >
-            <path
-              fillRule="evenodd"
-              d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </MenuButton>
+        {({ open }) => (
+          <>
+            <MenuButton
+              className={clsx(
+                buttonBase,
+                'rounded-r-lg px-2 focus:outline-none',
+              )}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="size-4"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </MenuButton>
 
-        <MenuItems
-          anchor="bottom end"
-          transition
-          className="z-50 mt-2 w-52 origin-top-right rounded-xl bg-white p-1 shadow-lg ring-1 ring-taupe-950/5 transition duration-100 ease-out data-[closed]:scale-95 data-[closed]:opacity-0 dark:bg-taupe-900 dark:ring-taupe-50/5"
-        >
+            <AnimatePresence>
+              {open && (
+                <MenuItems
+                  static
+                  as={motion.div}
+                  anchor="bottom end"
+                  variants={menuPanelVariants}
+                  initial="initial"
+                  animate="open"
+                  exit="exit"
+                  className="border-shadow z-50 mt-2 w-52 rounded-lg bg-taupe-100 p-1 focus:outline-none dark:bg-taupe-950"
+                >
           <MenuItem>
             <a
               href={`/api/animations/${slug}/md`}
               target="_blank"
-              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 data-[focus]:bg-taupe-100 dark:text-taupe-300 dark:data-[focus]:bg-taupe-800"
+              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 focus:outline-none data-[focus]:bg-taupe-200 dark:text-taupe-300 dark:data-[focus]:bg-taupe-900"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 128" fill="currentColor" className="size-4 text-taupe-400 dark:text-taupe-500">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 128" fill="currentColor" className="size-4">
                 <rect width="198" height="118" x="5" y="5" ry="10" stroke="currentColor" strokeWidth="10" fill="none"/>
                 <path d="M30 98V30h20l20 25 20-25h20v68H90V59L70 84 50 59v39zm125 0l-30-33h20V30h20v35h20z"/>
               </svg>
@@ -124,9 +178,9 @@ export function PromptActions() {
               href={`https://chatgpt.com`}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 data-[focus]:bg-taupe-100 dark:text-taupe-300 dark:data-[focus]:bg-taupe-800"
+              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 focus:outline-none data-[focus]:bg-taupe-200 dark:text-taupe-300 dark:data-[focus]:bg-taupe-900"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-4 text-taupe-400 dark:text-taupe-500">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-4">
                 <path d="M10.8312 2.25C8.55502 2.25 6.72848 4.05765 6.72848 6.26471V11.6721L8.5033 12.717L8.50289 7.03256C8.50287 6.82597 8.61397 6.63534 8.79373 6.53351L13.8559 3.66586C13.8788 3.65291 13.9017 3.64014 13.9247 3.62756C13.1733 2.78424 12.0673 2.25 10.8312 2.25Z" />
                 <path d="M20.3539 9.45169C20.7288 8.39044 20.649 7.18338 20.0322 6.13514C18.9022 4.21475 16.3899 3.54874 14.4214 4.66389L9.65002 7.36677L9.65016 9.25194L14.6484 6.52949C14.8224 6.4347 15.033 6.43646 15.2054 6.53413L20.2676 9.40178C20.2966 9.41818 20.3253 9.43483 20.3539 9.45169Z" />
                 <path d="M9.65026 10.5581L9.65047 13.3923L11.9529 14.7478L14.4088 13.4101L14.4558 10.67L12.0476 9.25228L9.65026 10.5581Z" />
@@ -143,15 +197,19 @@ export function PromptActions() {
               href={`https://claude.ai`}
               target="_blank"
               rel="noopener noreferrer"
-              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 data-[focus]:bg-taupe-100 dark:text-taupe-300 dark:data-[focus]:bg-taupe-800"
+              className="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-taupe-700 focus:outline-none data-[focus]:bg-taupe-200 dark:text-taupe-300 dark:data-[focus]:bg-taupe-900"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-4 text-taupe-400 dark:text-taupe-500">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-4">
                 <path d="M21.9233 14.4301L22 14L21.6291 13.4965L20.9428 13.065C20.9428 13.065 19.4289 12.8889 18.2831 12.8889C16.8124 12.8889 15.7782 12.8006 15.2699 12.7432L15.202 12.6527L21.6291 11.1704L21.9233 10.5254L21.8667 10.2086L21.1651 9.83519L15.8356 10.8875L15.7677 10.7857C16.458 9.31683 18.0195 7.56458 19.0605 6.16902L19.3547 5.18458L18.7323 4.23409H17.8384C17.8384 4.23409 16.5145 5.28642 14.0252 8.70365L13.6857 9.05443H13.5273L14.5796 3.13651L14.1949 2.54811L13.6857 2.3218L13.086 2.70652L12.7692 3.46465L12.2034 9.65414H12.0676L11.8074 8.70365C11.8074 8.70365 9.53297 4.44909 8.7638 2.4142L8.39441 2.12448L7.5 2L7.23552 2.12448L6.61986 2.92846L6.85888 4.04389L9.85751 9.31683L9.71264 9.43272L4.98293 5.82568L4.07755 5.76049L3.53432 6.33994L3.67194 7.16564L4.01236 7.60747L9.79232 11.5042L10.0054 11.7186L9.9083 11.8278L2.45561 11.2539L2.03906 11.5195L2 11.8278L2.45561 12.4076L2.93889 12.52L9.86375 12.7891L9.94141 12.918L9.86375 13.1002C9.56079 13.2482 5.73332 15.2667 4.38587 16.3764L4.1657 16.5701L4.09524 17.2042L4.51797 17.5917L5.47792 17.4508L10.762 13.9897L10.8149 14.1747C10.8149 14.1747 9.4146 15.7423 6.49952 19.6437L6.44668 20.2426L7.03674 20.5068L7.35379 20.4099L8.7805 18.8775L11.8101 14.7559H11.9598L11.8101 15.3548C11.7889 15.4887 11.2376 18.7543 10.7092 20.9736L11.0086 21.6341L11.5 22L12.1183 21.775L12.3561 21.458L12.9197 15.4253L13.0518 15.3548C13.0518 15.3548 14.6899 18.1466 16.3016 20.3923L16.8388 20.4804L17.3672 20.3043L17.5257 20.0048L17.42 19.1065L15.0862 15.6542V15.4957H15.2095L19.3752 18.8687H19.6394L19.9036 18.5077L19.8067 18.0321L15.1391 13.7079V13.5846L20.8811 14.9585L21.9233 14.4301Z" />
               </svg>
               Open in Claude
             </a>
           </MenuItem>
         </MenuItems>
+              )}
+            </AnimatePresence>
+          </>
+        )}
       </Menu>
     </div>
   )

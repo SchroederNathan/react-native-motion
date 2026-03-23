@@ -53,7 +53,7 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
       whileTap={{ scale: 0.96 }}
       transition={tapTransition}
       className={clsx(
-        'group relative flex flex-col gap-3 rounded-2xl p-3',
+        'group relative flex flex-col gap-3',
         'transition-shadow duration-150 ease-out',
         'hover:border-shadow',
       )}
@@ -71,7 +71,7 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
       }}
     >
       <motion.div
-        className="pointer-events-none absolute inset-0 rounded-2xl bg-taupe-950/5 dark:bg-taupe-50/10"
+        className="pointer-events-none absolute -inset-3 rounded-2xl bg-taupe-950/5 dark:bg-taupe-50/10"
         initial={false}
         animate={{
           scale: hovered ? 1 : 0.92,
