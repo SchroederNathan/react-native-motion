@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useState, useMemo, type ReactNode } from 'react'
 import { SearchInput } from '@/components/elements/search-input'
 import { AnimationsGrid } from '@/components/sections/animations-grid'
 import { Container } from '@/components/elements/container'
@@ -37,19 +37,21 @@ export function AnimationSearchInput({ className }: { className?: string }) {
 
 export function FilteredAnimationsGrid({ animations }: { animations: AnimationMeta[] }) {
   const { query } = useContext(SearchContext)
+  const hasSearched = useRef(false)
+  if (query) hasSearched.current = true
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim()
     if (!q) return animations
     return animations.filter((a) => {
-      const haystack = [a.title, a.description, ...(a.tags ?? [])].join(' ').toLowerCase()
+      const haystack = [a.title, a.description, ...(a.tags ?? [])].filter(Boolean).join(' ').toLowerCase()
       return q.split(/\s+/).every((word) => haystack.includes(word))
     })
   }, [query, animations])
 
   return (
     <>
-      <AnimationsGrid animations={filtered} />
+      <AnimationsGrid animations={filtered} animate={!hasSearched.current} />
       {filtered.length === 0 && (
         <Container>
           <p className="pb-16 text-center text-sm text-taupe-500">

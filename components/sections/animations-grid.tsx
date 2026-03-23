@@ -4,7 +4,7 @@ import { Container } from '@/components/elements/container'
 import { AnimationCard } from '@/components/elements/animation-card'
 import type { AnimationMeta } from '@/lib/animations'
 
-export function AnimationsGrid({ animations }: { animations: AnimationMeta[] }) {
+export function AnimationsGrid({ animations, animate = true }: { animations: AnimationMeta[]; animate?: boolean }) {
   return (
     <section className="py-16">
       <Container>
@@ -12,8 +12,8 @@ export function AnimationsGrid({ animations }: { animations: AnimationMeta[] }) 
           {animations.map((animation, i) => (
             <div
               key={animation.slug}
-              className="blur-fade-in"
-              style={{ animationDelay: `${500 + i * 100}ms` }}
+              className={animate ? 'blur-fade-in' : undefined}
+              style={animate ? { animationDelay: `${500 + i * 100}ms` } : undefined}
             >
               <AnimationCard animation={animation} index={i} />
             </div>
