@@ -19,7 +19,7 @@ export default async function AnimationPage({
       <div className="flex items-center justify-between mb-4 lg:hidden">
         <Link
           href="/"
-          scroll={false}
+
           className="inline-flex items-center gap-1.5 text-sm/7 font-medium text-taupe-600 hover:text-taupe-950 dark:text-taupe-400 dark:hover:text-taupe-50 transition-colors"
         >
           <svg
@@ -40,13 +40,13 @@ export default async function AnimationPage({
       </div>
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 lg:items-stretch mb-12">
         <div className="lg:w-1/2 lg:shrink-0 self-start">
-          <VideoDemo src={meta.video} className="my-0" transitionName={`video-${slug}`} />
+          <VideoDemo src={meta.video} className="my-0" />
         </div>
         <div className="min-w-0 flex-1 flex flex-col self-stretch">
           <div className="hidden lg:flex items-center justify-between">
             <Link
               href="/"
-              scroll={false}
+    
               className="inline-flex items-center gap-1.5 text-sm/7 font-medium text-taupe-600 hover:text-taupe-950 dark:text-taupe-400 dark:hover:text-taupe-50 transition-colors"
             >
               <svg

@@ -14,7 +14,7 @@ const menuPanelSpring = { type: 'spring' as const, duration: 0.25, bounce: 0 }
 const menuPanelVariants = {
   initial: {
     opacity: 0,
-    y: 4,
+    y: -4,
     filter: 'blur(4px)',
     transition: menuPanelSpring,
   },

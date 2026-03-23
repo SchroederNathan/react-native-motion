@@ -1,6 +1,5 @@
 import Dither from '@/components/effects/dither'
 import { AnnouncementBadge } from '@/components/elements/announcement-badge'
-import { FirstLoadOnly } from '@/components/elements/first-load-only'
 import { Main } from '@/components/elements/main'
 import {
   AnimationSearchProvider,
@@ -14,7 +13,6 @@ export default async function Page() {
   const animations = await getAllAnimationMetas()
   return (
     <AnimationSearchProvider>
-      <FirstLoadOnly />
       <Main>
         <Hero
           id="hero"

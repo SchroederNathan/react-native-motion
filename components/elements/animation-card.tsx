@@ -2,10 +2,9 @@
 
 import { clsx } from 'clsx/lite'
 import { motion, useInView } from 'motion/react'
-import { ViewTransition, useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react'
+import { useRef, useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import Link from 'next/link'
 import type { AnimationMeta } from '@/lib/animations'
-import { videoCache, captureWhenIdle } from '@/lib/video-cache'
 
 const MotionLink = motion.create(Link)
 
@@ -17,52 +16,18 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
   const containerRef = useRef<HTMLAnchorElement>(null)
   const isHovered = useRef(false)
   const [hovered, setHovered] = useState(false)
-  const entry = videoCache.get(animation.video)
-  const [loaded, setLoaded] = useState(!!entry)
+  const [loaded, setLoaded] = useState(false)
   const inView = useInView(containerRef, { amount: 0.3 })
 
-  const lastTime = useRef(0)
-  const mounted = useRef(true)
-
   const onLoadedData = useCallback(() => {
-    if (!videoCache.has(animation.video)) {
-      videoCache.set(animation.video, { time: 0, poster: '' })
-    }
     setLoaded(true)
-    // Capture poster during idle time — non-blocking
-    const el = videoRef.current
-    if (el) captureWhenIdle(el, animation.video)
-  }, [animation.video])
+  }, [])
 
-  // Restore currentTime for cached videos and check readyState
   useLayoutEffect(() => {
     const el = videoRef.current
     if (!el) return
-    const saved = videoCache.get(animation.video)
-    if (saved) {
-      el.currentTime = saved.time
-      lastTime.current = saved.time
-    }
     if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       setLoaded(true)
-    }
-  }, [animation.video])
-
-  // Only update the ref, not the cache map
-  const onTimeUpdate = useCallback(() => {
-    const el = videoRef.current
-    if (el) {
-      lastTime.current = el.currentTime
-    }
-  }, [])
-
-  // Save time on unmount
-  useEffect(() => {
-    return () => {
-      const existing = videoCache.get(animation.video)
-      if (existing) {
-        existing.time = lastTime.current
-      }
     }
   }, [animation.video])
 
@@ -86,17 +51,11 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
     }
   }, [index, tryPlay])
 
-  // Skip the first inView=false cycle on mount so we don't reset cached time
   useEffect(() => {
-    if (!mounted.current) {
-      if (inView) {
-        tryPlay()
-      } else if (!isHovered.current) {
-        tryPause()
-      }
-    } else if (inView) {
-      mounted.current = false
+    if (inView) {
       tryPlay()
+    } else if (!isHovered.current) {
+      tryPause()
     }
   }, [inView, tryPlay, tryPause])
 
@@ -133,27 +92,22 @@ export function AnimationCard({ animation, index = 0 }: { animation: AnimationMe
         }}
         transition={hoverBgTransition}
       />
-      <ViewTransition name={`video-${animation.slug}`}>
-        <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-taupe-200">
-          <video
-            ref={videoRef}
-            src={animation.video}
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            poster={entry?.poster || undefined}
-            onLoadedData={onLoadedData}
-            onTimeUpdate={onTimeUpdate}
-            className={clsx(
-              'absolute inset-0 h-full w-full object-cover transition-opacity',
-              entry ? 'duration-0' : 'duration-500',
-              loaded ? 'opacity-100' : 'opacity-0',
-            )}
-          />
-          <div className="pointer-events-none absolute inset-0 rounded-xl image-outline" />
-        </div>
-      </ViewTransition>
+      <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-taupe-200">
+        <video
+          ref={videoRef}
+          src={animation.video}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onLoadedData={onLoadedData}
+          className={clsx(
+            'absolute inset-0 h-full w-full object-cover transition-opacity duration-500',
+            loaded ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+        <div className="pointer-events-none absolute inset-0 rounded-xl image-outline" />
+      </div>
       <div className="px-1">
         <h3 className="text-sm/6 font-medium text-taupe-950 dark:text-taupe-50">
           {animation.title}
