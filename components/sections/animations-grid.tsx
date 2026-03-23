@@ -8,7 +8,7 @@ export function AnimationsGrid({ animations, animate = true }: { animations: Ani
   return (
     <section className="py-16">
       <Container>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={`grid gap-6 ${animations.length < 3 ? 'mx-auto grid-cols-1 sm:grid-cols-2 lg:max-w-2/3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
           {animations.map((animation, i) => (
             <div
               key={animation.slug}
