@@ -110,6 +110,13 @@ export async function generateMetadata({
     openGraph: {
       title: `${meta.title} - React Native Motion`,
       description: meta.description,
+      images: [{ url: "/og-image.png", width: 2400, height: 1260 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${meta.title} - React Native Motion`,
+      description: meta.description,
+      images: ["/og-image.png"],
     },
   }
 }
