@@ -45,26 +45,6 @@ export default function App() {
 }
 ```
 
-## GalleryStackCarousel Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| items | `CarouselItem[]` | required | Array of `{ id, image, backdropImage? }` objects |
-| onIndexChange | `(index: number) => void` | - | Fires when the active card changes |
-| onPressItem | `(item: CarouselItem, index: number) => void` | - | Fires when a card is tapped |
-| itemWidth | number | `SCREEN_WIDTH * 0.55` | Width of each card |
-| itemAspectRatio | number | 1.5 | Height-to-width ratio for cards |
-
-## CarouselBackdrop Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| images | `string[]` | required | Image URIs matching carousel items |
-| currentIndex | number | 0 | Index of the active image to display |
-| height | number | 400 | Height of the backdrop area |
-| backgroundColor | string | `'#000'` | Color the backdrop fades into at the bottom |
-| blurIntensity | number | 100 | Blur strength for the frosted glass effect |
-
 ## How It Works
 
 This animation has two independent parts that connect through a single piece of state: the active card index. The carousel tells you which card is focused, and the backdrop uses that to crossfade its background image.
