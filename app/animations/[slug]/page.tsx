@@ -1,6 +1,6 @@
 import { getAllAnimationSlugs } from '@/lib/animations'
 import { VideoDemo } from '@/components/elements/video-demo'
-import { PromptActionsClient } from '@/components/elements/prompt-actions-client'
+
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
@@ -36,7 +36,6 @@ export default async function AnimationPage({
           </svg>
           Back
         </Link>
-        <PromptActionsClient />
       </div>
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 lg:items-stretch mb-12">
         <div className="w-full lg:w-1/2 lg:shrink-0 lg:self-start">
@@ -63,7 +62,6 @@ export default async function AnimationPage({
               </svg>
               Back
             </Link>
-            <PromptActionsClient />
           </div>
           <div className="flex-1 flex flex-col justify-center">
             <h1 className="text-4xl/10 tracking-tight font-medium text-taupe-950 dark:text-taupe-50 mb-3 text-wrap-balance">

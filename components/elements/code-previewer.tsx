@@ -8,6 +8,7 @@ import {
   type ReactElement,
 } from 'react'
 import { FileIcon } from './file-icon'
+import { PromptActionsClient } from './prompt-actions-client'
 
 interface FileEntry {
   name: string
@@ -158,7 +159,12 @@ export function CodePreviewer({ children }: { children: ReactNode }) {
   const activeFile = files[activeIndex]
 
   return (
-    <div className="mb-6 rounded-xl overflow-hidden inset-ring-1 inset-ring-taupe-950/10 dark:inset-ring-taupe-50/10 bg-taupe-50 dark:bg-taupe-50/[0.02]">
+    <div className="mt-10 mb-10">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg/7 tracking-tight font-medium text-taupe-950 dark:text-taupe-50">Copy and paste the following code into your project.</h3>
+        <PromptActionsClient />
+      </div>
+    <div className="rounded-xl overflow-hidden inset-ring-1 inset-ring-taupe-950/10 dark:inset-ring-taupe-50/10 bg-taupe-50 dark:bg-taupe-50/[0.02]">
       {/* Mobile: horizontal tab bar */}
       <div className="flex lg:hidden overflow-x-auto border-b border-taupe-200/60 dark:border-taupe-50/10 bg-taupe-100/50 dark:bg-taupe-50/5">
         {files.map((file, i) => (
@@ -213,6 +219,7 @@ export function CodePreviewer({ children }: { children: ReactNode }) {
           </div>
         </div>
       </div>
+    </div>
     </div>
   )
 }

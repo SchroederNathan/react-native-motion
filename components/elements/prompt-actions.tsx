@@ -37,49 +37,54 @@ export function PromptActions() {
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const prompt = `Explain this React Native animation for me\nrnmotion.dev/animations/${slug}.md`
+  const mdUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/animations/${slug}.md`
+
+  const implementPrompt = `You are given a task to integrate a React Native animation into your codebase.
+Please verify your project has the following setup:
+- React Native with Expo
+- react-native-reanimated
+- react-native-gesture-handler
+- TypeScript
+
+If any of these are missing, provide instructions on how to install them via npx expo install.
+
+Read the animation source and implementation guide from: ${mdUrl}
+
+Then:
+1. Install all required dependencies listed in the guide
+2. Copy each file into your project at the paths specified
+3. Follow the usage example to integrate the animation into your app
+4. Review the "Common Pitfalls" section and verify your implementation avoids each one`
+
+  const explainPrompt = `I want to understand how this React Native animation works. Read the full implementation and guide from: ${mdUrl}
+
+Then explain:
+1. The overall animation architecture — what techniques and libraries are used and why
+2. How the gesture handling and animation values flow through the components
+3. Key implementation details that make the animation feel polished
+4. The common pitfalls listed and why each one matters
+
+Focus on building my mental model of the animation system, not just describing the code line by line.`
 
   const openInChatGPT = useCallback(() => {
-    window.open(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`, '_blank')
-  }, [prompt])
+    window.open(`https://chatgpt.com/?q=${encodeURIComponent(explainPrompt)}`, '_blank')
+  }, [explainPrompt])
 
   const openInClaude = useCallback(() => {
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(prompt)}`, '_blank')
-  }, [prompt])
+    window.open(`https://claude.ai/new?q=${encodeURIComponent(explainPrompt)}`, '_blank')
+  }, [explainPrompt])
 
   const copyPrompt = useCallback(async () => {
     if (copied) return
     try {
-      // Use ClipboardItem with a blob promise so the clipboard.write() call
-      // happens synchronously within the user gesture — required on Safari/mobile.
-      const blobPromise = fetch(`/api/animations/${slug}/md`)
-        .then((res) => {
-          if (!res.ok) throw new Error('Failed to fetch prompt')
-          return res.text()
-        })
-        .then((text) => new Blob([text], { type: 'text/plain' }))
-
-      await navigator.clipboard.write([
-        new ClipboardItem({ 'text/plain': blobPromise }),
-      ])
+      await navigator.clipboard.writeText(implementPrompt)
       setCopied(true)
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
       timeoutRef.current = setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for browsers that don't support ClipboardItem with promises
-      try {
-        const res = await fetch(`/api/animations/${slug}/md`)
-        if (!res.ok) return
-        const text = await res.text()
-        await navigator.clipboard.writeText(text)
-        setCopied(true)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => setCopied(false), 2000)
-      } catch {
-        // Silently fail — clipboard not available
-      }
+      // Silently fail — clipboard not available
     }
-  }, [copied, slug])
+  }, [copied, implementPrompt])
 
   return (
     <div
