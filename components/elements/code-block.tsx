@@ -4,22 +4,28 @@ import {
   useRef,
   useState,
   useCallback,
+  useMemo,
+  isValidElement,
   type ReactNode,
 } from 'react'
 
-export function CodeBlock({ children }: { children: ReactNode }) {
+function extractText(node: ReactNode): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (!node) return ''
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (isValidElement(node)) return extractText((node.props as any).children)
+  return ''
+}
+
+export function CodeBlock({ children, title }: { children: ReactNode; title?: string }) {
   const codeRef = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
-  const [lineCount, setLineCount] = useState(0)
 
-  const measureRef = useCallback((node: HTMLPreElement | null) => {
-    codeRef.current = node
-    if (node) {
-      const text = node.textContent || ''
-      const lines = text.replace(/\n$/, '').split('\n')
-      setLineCount(lines.length)
-    }
-  }, [])
+  const lineCount = useMemo(() => {
+    const text = extractText(children)
+    return text.replace(/\n$/, '').split('\n').length
+  }, [children])
 
   const handleCopy = useCallback(() => {
     if (codeRef.current) {
@@ -32,7 +38,7 @@ export function CodeBlock({ children }: { children: ReactNode }) {
 
   return (
     <pre
-      ref={measureRef}
+      ref={codeRef}
       className="group/code relative overflow-x-auto rounded-xl bg-taupe-200/70 dark:bg-taupe-500/10 text-sm text-taupe-900 dark:text-taupe-100 mb-4"
     >
       <button
@@ -71,7 +77,7 @@ export function CodeBlock({ children }: { children: ReactNode }) {
           className="shrink-0 py-4 pl-4 pr-3 text-right select-none text-taupe-500 dark:text-taupe-500 font-mono text-xs"
           aria-hidden="true"
         >
-          {lineCount > 0 && Array.from({ length: lineCount }, (_, i) => (
+          {Array.from({ length: lineCount }, (_, i) => (
             <div key={i} className="leading-6">
               {i + 1}
             </div>

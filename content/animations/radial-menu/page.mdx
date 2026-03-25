@@ -8,11 +8,13 @@ export const meta = {
 
 ## Overview
 
-This animation combines a **long-press gesture** with a **radial action menu** that fans out from the press point. When the user long-presses a card, the screen dims with a blur overlay, the card is cloned into the overlay layer, and circular action buttons spring outward from the touch point. As the user drags their finger, buttons scale up on proximity and nudge away from center. Releasing over a button triggers selection with haptic feedback.
+A **long-press radial action menu** that fans out from the touch point. The screen dims with a blur overlay, the pressed card is cloned into the overlay, and circular action buttons spring outward. Buttons scale up on proximity and nudge away from the finger — releasing over a button triggers selection with haptic feedback. The menu automatically adapts its angle to fan away from screen edges.
 
-## Usage
+<Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'expo-blur', 'expo-haptics', 'expo-image']} />
 
-```jsx
+<CodePreviewer>
+
+```tsx title="App.tsx"
 import { useRef, useMemo } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
@@ -51,7 +53,6 @@ function MediaCard({ item }) {
   )
 }
 
-// Wrap your app in OverlayProvider
 export default function App() {
   return (
     <OverlayProvider>
@@ -59,486 +60,523 @@ export default function App() {
     </OverlayProvider>
   )
 }
+
+const styles = StyleSheet.create({
+  card: {
+    width: 200,
+    height: 300,
+    borderRadius: 12,
+    borderCurve: 'continuous',
+    backgroundColor: '#333',
+  },
+})
 ```
 
-## How It Works
+```tsx title="OverlayProvider.tsx"
+import { createContext, useCallback, useContext, useState } from 'react'
+import { StyleSheet, View, type ReactNode } from 'react-native'
+import Animated, {
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated'
+import { BlurView } from 'expo-blur'
 
-This animation has three independent parts that coordinate through shared values: a **gesture system** that detects long-press and tracks the finger, a **radial menu** that positions and animates action buttons, and a **blur overlay** that dims the background and renders a clone of the pressed element.
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView)
 
-### Part 1: The Gesture System (`useRadialOverlay`)
+interface OverlayContextValue {
+  showOverlay: (content: ReactNode) => void
+  hideOverlay: () => void
+}
 
-The hook composes two gestures — `Gesture.LongPress()` and `Gesture.Pan()` — that run simultaneously. The long press opens the menu, and the pan tracks the finger position in real time.
+const OverlayContext = createContext<OverlayContextValue | null>(null)
 
-#### Shared values
+export function useOverlay() {
+  const ctx = useContext(OverlayContext)
+  if (!ctx) throw new Error('useOverlay must be used within OverlayProvider')
+  return ctx
+}
 
-Five shared values coordinate the gesture and menu:
+export function OverlayProvider({ children }: { children: ReactNode }) {
+  const [isVisible, setIsVisible] = useState(false)
+  const [overlayContent, setOverlayContent] = useState<ReactNode>(null)
 
-```tsx
+  const blurIntensity = useSharedValue(0)
+  const overlayOpacity = useSharedValue(0)
+  const contentScale = useSharedValue(1)
+  const contentRotation = useSharedValue(0)
+
+  const showOverlay = useCallback((content: ReactNode) => {
+    setOverlayContent(content)
+    setIsVisible(true)
+    overlayOpacity.set(withTiming(1, { duration: 300 }))
+    blurIntensity.set(withTiming(100, { duration: 300 }))
+    contentScale.set(withTiming(1.1, { duration: 300 }))
+    contentRotation.set(withTiming(Math.random() * 6 - 3, { duration: 300 }))
+  }, [])
+
+  const hideOverlay = useCallback(() => {
+    overlayOpacity.set(withTiming(0, { duration: 200 }))
+    blurIntensity.set(withTiming(0, { duration: 200 }))
+    contentScale.set(withTiming(1, { duration: 200 }))
+    contentRotation.set(withTiming(0, { duration: 200 }))
+    setTimeout(() => {
+      setIsVisible(false)
+      setOverlayContent(null)
+    }, 200)
+  }, [])
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.get(),
+    zIndex: 9998,
+  }))
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.get(),
+    transform: [
+      { scale: contentScale.get() },
+      { rotate: `${contentRotation.get()}deg` },
+    ],
+    zIndex: 9999,
+  }))
+
+  const blurAnimatedProps = useAnimatedProps(() => ({
+    intensity: blurIntensity.get(),
+  }))
+
+  return (
+    <OverlayContext.Provider value={{ showOverlay, hideOverlay }}>
+      {children}
+      {isVisible && (
+        <>
+          <Animated.View style={[StyleSheet.absoluteFillObject, overlayStyle]}>
+            <AnimatedBlurView
+              tint="dark"
+              style={StyleSheet.absoluteFill}
+              animatedProps={blurAnimatedProps}
+            />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
+          </Animated.View>
+          <Animated.View style={[StyleSheet.absoluteFillObject, contentStyle]}>
+            {overlayContent}
+          </Animated.View>
+        </>
+      )}
+    </OverlayContext.Provider>
+  )
+}
+```
+
+```tsx title="useRadialOverlay.ts"
+import { useCallback, useRef, type RefObject } from 'react'
+import { StyleSheet, View, type ReactNode } from 'react-native'
 import { useSharedValue } from 'react-native-reanimated'
-
-const cursorX = useSharedValue(0)
-const cursorY = useSharedValue(0)
-const releaseSignal = useSharedValue(0)
-const overlayOpen = useSharedValue(0)
-const isLongPressed = useSharedValue(false)
-```
-
-`cursorX`/`cursorY` track the finger's absolute screen position. `releaseSignal` is incremented when the finger lifts — the menu reacts to the change rather than polling. `overlayOpen` gates the release signal so it only fires when the menu is visible.
-
-#### Long press gesture
-
-The long press triggers after a configurable duration (default 500ms). On activation, it fires haptic feedback and measures the target view to create a positioned clone:
-
-```tsx
 import { Gesture } from 'react-native-gesture-handler'
 import { runOnJS } from 'react-native-reanimated'
 import * as Haptics from 'expo-haptics'
+import { useOverlay } from './OverlayProvider'
+import { RadialMenu } from './RadialMenu'
 
-const longPressGesture = Gesture.LongPress()
-  .minDuration(500)
-  .maxDistance(25)
-  .onStart((event) => {
-    'worklet'
-    runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium)
-    isLongPressed.value = true
-    cursorX.value = event.absoluteX
-    cursorY.value = event.absoluteY
-    runOnJS(openOverlayAt)(event.absoluteX, event.absoluteY)
-  })
-  .onFinalize(() => {
-    'worklet'
-    isLongPressed.value = false
-  })
+type RadialActionDef = { id: string; icon: any; title: string }
+
+export function useRadialOverlay({
+  actions,
+  onSelect,
+  onCancel,
+  targetRef,
+  renderClone,
+}: {
+  actions: RadialActionDef[]
+  onSelect: (id: string) => void
+  onCancel?: () => void
+  targetRef: RefObject<View>
+  renderClone: (layout: { x: number; y: number; width: number; height: number }) => ReactNode
+}) {
+  const { showOverlay, hideOverlay } = useOverlay()
+
+  const cursorX = useSharedValue(0)
+  const cursorY = useSharedValue(0)
+  const releaseSignal = useSharedValue(0)
+  const overlayOpen = useSharedValue(0)
+  const isLongPressed = useSharedValue(false)
+
+  const handleSelect = useCallback((id: string) => {
+    hideOverlay()
+    overlayOpen.set(0)
+    onSelect(id)
+  }, [hideOverlay, onSelect])
+
+  const handleCancel = useCallback(() => {
+    hideOverlay()
+    overlayOpen.set(0)
+    onCancel?.()
+  }, [hideOverlay, onCancel])
+
+  const openOverlayAt = useCallback((pressX: number, pressY: number) => {
+    targetRef.current?.measureInWindow((x, y, width, height) => {
+      const clone = renderClone({ x, y, width, height })
+      const content = (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 10000 }]}>
+          {clone}
+          <RadialMenu
+            pressX={pressX}
+            pressY={pressY}
+            cursorX={cursorX}
+            cursorY={cursorY}
+            releaseSignal={releaseSignal}
+            actions={actions}
+            onSelect={handleSelect}
+            onCancel={handleCancel}
+          />
+        </View>
+      )
+      showOverlay(content)
+      overlayOpen.set(1)
+    })
+  }, [actions, showOverlay, targetRef, cursorX, cursorY, releaseSignal, renderClone])
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(500)
+    .maxDistance(25)
+    .onStart((event) => {
+      'worklet'
+      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium)
+      isLongPressed.set(true)
+      cursorX.set(event.absoluteX)
+      cursorY.set(event.absoluteY)
+      runOnJS(openOverlayAt)(event.absoluteX, event.absoluteY)
+    })
+    .onFinalize(() => {
+      'worklet'
+      isLongPressed.set(false)
+    })
+
+  const panGesture = Gesture.Pan()
+    .maxPointers(1)
+    .activateAfterLongPress(500)
+    .onBegin((e) => {
+      'worklet'
+      cursorX.set(e.absoluteX)
+      cursorY.set(e.absoluteY)
+    })
+    .onUpdate((e) => {
+      'worklet'
+      cursorX.set(e.absoluteX)
+      cursorY.set(e.absoluteY)
+    })
+    .onEnd(() => {
+      'worklet'
+      if (overlayOpen.get() === 1) {
+        releaseSignal.set(releaseSignal.get() + 1)
+      }
+    })
+
+  return { longPressGesture, panGesture, isLongPressed, overlayOpen }
+}
 ```
 
-#### Pan gesture with `activateAfterLongPress`
+```tsx title="RadialMenu.tsx"
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Dimensions, StyleSheet, View } from 'react-native'
+import Animated, {
+  useAnimatedStyle,
+  useAnimatedReaction,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+  runOnJS,
+  type SharedValue,
+} from 'react-native-reanimated'
+import * as Haptics from 'expo-haptics'
 
-The pan gesture uses `.activateAfterLongPress()` to match the long press duration. This means it doesn't interfere with scrolling — it only activates after the long press threshold is met:
+type RadialActionDef = { id: string; icon: any; title: string }
 
-```tsx
-const panGesture = Gesture.Pan()
-  .maxPointers(1)
-  .activateAfterLongPress(500)
-  .onBegin((e) => {
-    'worklet'
-    cursorX.value = e.absoluteX
-    cursorY.value = e.absoluteY
+const BUTTON_RADIUS = 28
+const DEFAULT_RADIUS = 96
+const DEFAULT_ANGLE_STEP_DEG = 40
+const BASE_ICON_SIZE = 22
+
+function lerpAngle(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+function RadialButton({
+  button,
+  pressX,
+  pressY,
+  cursorX,
+  cursorY,
+  animationProgress,
+  hoveredId,
+}: {
+  button: { id: string; icon: any; pos: { x: number; y: number } }
+  pressX: number
+  pressY: number
+  cursorX: SharedValue<number>
+  cursorY: SharedValue<number>
+  animationProgress: SharedValue<number>
+  hoveredId: SharedValue<string | null>
+}) {
+  const [currentIconSize, setCurrentIconSize] = useState(BASE_ICON_SIZE)
+  const Icon = button.icon
+
+  const proximityScale = useDerivedValue(() => {
+    const cx = cursorX?.get() ?? pressX
+    const cy = cursorY?.get() ?? pressY
+    const dx = cx - button.pos.x
+    const dy = cy - button.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const normalized = Math.max(0, Math.min(1, 1 - dist / (BUTTON_RADIUS * 2)))
+    return 1 + normalized * 0.4
   })
-  .onUpdate((e) => {
-    'worklet'
-    cursorX.value = e.absoluteX
-    cursorY.value = e.absoluteY
-  })
-  .onEnd(() => {
-    'worklet'
-    if (overlayOpen.value === 1) {
-      releaseSignal.value = releaseSignal.value + 1
+
+  useAnimatedReaction(
+    () => proximityScale.get() * BASE_ICON_SIZE,
+    (size) => {
+      runOnJS(setCurrentIconSize)(Math.round(size))
+    }
+  )
+
+  const animatedButtonStyle = useAnimatedStyle(() => {
+    const progress = animationProgress.get()
+    const startX = pressX - BUTTON_RADIUS
+    const startY = pressY - BUTTON_RADIUS
+    const endX = button.pos.x - BUTTON_RADIUS
+    const endY = button.pos.y - BUTTON_RADIUS
+
+    const currentX = startX + (endX - startX) * progress
+    const currentY = startY + (endY - startY) * progress
+
+    const cx = cursorX?.get() ?? pressX
+    const cy = cursorY?.get() ?? pressY
+    const dx = cx - button.pos.x
+    const dy = cy - button.pos.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const normalized = Math.max(0, Math.min(1, 1 - dist / (BUTTON_RADIUS * 2)))
+    const proximity = 1 + normalized * 0.4
+    const scale = progress * proximity
+    const opacity = progress
+
+    const vx = endX - startX
+    const vy = endY - startY
+    const vlen = Math.max(1, Math.sqrt(vx * vx + vy * vy))
+    const closeness = Math.max(0, Math.min(1, (proximity - 1) / 0.4))
+    const eased = closeness * closeness
+    const offset = 32 * eased * progress
+    const adjX = currentX + (vx / vlen) * offset
+    const adjY = currentY + (vy / vlen) * offset
+
+    const baseSize = BUTTON_RADIUS * 2
+    return {
+      position: 'absolute' as const,
+      left: adjX,
+      top: adjY,
+      opacity,
+      width: baseSize * scale,
+      height: baseSize * scale,
+      borderRadius: baseSize * scale,
     }
   })
-```
 
-The release signal increments instead of toggling — this ensures `useAnimatedReaction` always detects the change, even if multiple releases happen quickly.
+  const activeIconStyle = useAnimatedStyle(() => ({
+    opacity: hoveredId.get() === button.id ? 1 : 0,
+    position: 'absolute' as const,
+  }))
 
-#### Opening the overlay
+  const inactiveIconStyle = useAnimatedStyle(() => ({
+    opacity: hoveredId.get() === button.id ? 0 : 1,
+    position: 'absolute' as const,
+  }))
 
-When the long press fires, the hook measures the target view's screen position and renders a clone plus the radial menu into the overlay:
+  return (
+    <Animated.View
+      style={[
+        { alignItems: 'center', justifyContent: 'center', backgroundColor: 'white' },
+        animatedButtonStyle,
+      ]}
+    >
+      <Animated.View style={activeIconStyle}>
+        <Icon size={currentIconSize} color="#000000" />
+      </Animated.View>
+      <Animated.View style={inactiveIconStyle}>
+        <Icon size={currentIconSize} color="#FFFFFF" />
+      </Animated.View>
+    </Animated.View>
+  )
+}
 
-```tsx
-const openOverlayAt = useCallback((pressX, pressY) => {
-  targetRef.current?.measureInWindow((x, y, width, height) => {
-    const clone = renderClone({ x, y, width, height })
-    const content = (
-      <View style={[StyleSheet.absoluteFill, { zIndex: 10000 }]}>
-        {clone}
-        <RadialMenu
+export function RadialMenu({
+  pressX,
+  pressY,
+  cursorX,
+  cursorY,
+  releaseSignal,
+  actions,
+  onSelect,
+  onCancel,
+  radius = DEFAULT_RADIUS,
+  angleStepDeg = DEFAULT_ANGLE_STEP_DEG,
+}: {
+  pressX: number
+  pressY: number
+  cursorX: SharedValue<number>
+  cursorY: SharedValue<number>
+  releaseSignal: SharedValue<number>
+  actions: RadialActionDef[]
+  onSelect: (id: string) => void
+  onCancel: () => void
+  radius?: number
+  angleStepDeg?: number
+}) {
+  const { width, height } = Dimensions.get('window')
+  const animationProgress = useSharedValue(0)
+  const hoveredId = useSharedValue<string | null>(null)
+  const lastHapticId = useSharedValue<string | null>(null)
+  const hasAnimatedIn = useRef(false)
+
+  useEffect(() => {
+    if (!hasAnimatedIn.current) {
+      hasAnimatedIn.current = true
+      animationProgress.set(withSpring(1, { damping: 80 }))
+    }
+  }, [animationProgress])
+
+  const baseAngleDeg = useMemo(() => {
+    const cx = width / 2
+    const isTopSixth = pressY < height / 4
+    const isCenterBand = Math.abs(pressX - cx) < width * 0.1
+
+    const centerAngle = isTopSixth ? 180 : 0
+    const leftFar = isTopSixth ? 230 : 310
+    const rightFar = isTopSixth ? 120 : 60
+
+    const dxNorm = Math.min(1, Math.abs(pressX - cx) / (width / 2))
+
+    let userAngle: number
+    if (isCenterBand) {
+      userAngle = centerAngle
+    } else if (pressX < cx) {
+      userAngle = lerpAngle(centerAngle, leftFar, dxNorm)
+    } else {
+      userAngle = lerpAngle(centerAngle, rightFar, dxNorm)
+    }
+
+    return (270 - userAngle + 360) % 360
+  }, [pressX, pressY, width, height])
+
+  const anglesDeg = useMemo(() => {
+    const count = actions.length
+    if (count === 1) return [baseAngleDeg]
+    const half = (count - 1) / 2
+    return Array.from({ length: count }, (_, i) =>
+      baseAngleDeg + (i - half) * angleStepDeg
+    )
+  }, [baseAngleDeg, actions.length, angleStepDeg])
+
+  const toXY = (deg: number) => {
+    const rad = (deg * Math.PI) / 180
+    return {
+      x: pressX + radius * Math.cos(rad),
+      y: pressY + radius * Math.sin(rad),
+    }
+  }
+
+  const buttons = actions.map((action, i) => ({
+    id: action.id,
+    icon: action.icon,
+    pos: toXY(anglesDeg[i]),
+  }))
+
+  const buttonCenters = buttons.map((b) => ({ id: b.id, x: b.pos.x, y: b.pos.y }))
+
+  // Hover detection
+  useAnimatedReaction(
+    () => cursorX && cursorY ? { x: cursorX.get(), y: cursorY.get() } : null,
+    (pos) => {
+      if (!pos) return
+      let nearestId: string | null = null
+      let nearestDist2 = Infinity
+      const threshold2 = (BUTTON_RADIUS * 3) ** 2
+
+      for (let i = 0; i < buttonCenters.length; i++) {
+        const b = buttonCenters[i]
+        const dx = pos.x - b.x
+        const dy = pos.y - b.y
+        const dist2 = dx * dx + dy * dy
+        if (dist2 < nearestDist2) {
+          nearestDist2 = dist2
+          nearestId = b.id
+        }
+      }
+
+      const active = nearestId && nearestDist2 <= threshold2 ? nearestId : null
+
+      if (hoveredId.get() !== active) {
+        hoveredId.set(active)
+        if (active && lastHapticId.get() !== active) {
+          lastHapticId.set(active)
+          runOnJS(Haptics.selectionAsync)()
+        } else if (!active) {
+          lastHapticId.set(null)
+        }
+      }
+    }
+  )
+
+  // Release signal
+  useAnimatedReaction(
+    () => releaseSignal ? releaseSignal.get() : -1,
+    (val, prev) => {
+      if (val === -1 || prev == null || val === prev) return
+      if (hoveredId.get()) {
+        runOnJS(Haptics.selectionAsync)()
+        runOnJS(onSelect)(hoveredId.get()!)
+      } else {
+        runOnJS(onCancel)()
+      }
+    }
+  )
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {buttons.map((button) => (
+        <RadialButton
+          key={button.id}
+          button={button}
           pressX={pressX}
           pressY={pressY}
           cursorX={cursorX}
           cursorY={cursorY}
-          releaseSignal={releaseSignal}
-          actions={actions}
-          onSelect={handleSelect}
-          onCancel={handleCancel}
+          animationProgress={animationProgress}
+          hoveredId={hoveredId}
         />
-      </View>
-    )
-    showOverlay(content)
-    overlayOpen.value = 1
-  })
-}, [actions, showOverlay, targetRef, cursorX, cursorY, releaseSignal, renderClone])
-```
-
-### Part 2: The Radial Menu
-
-The menu positions action buttons in an arc around the press point. Each button springs outward from center with proximity-based scaling as the finger approaches.
-
-#### Constants
-
-```tsx
-const BUTTON_RADIUS = 28          // 56px diameter per button
-const DEFAULT_RADIUS = 96          // distance from press point to button center
-const DEFAULT_ANGLE_STEP_DEG = 40  // angular spread between buttons
-const BASE_ICON_SIZE = 22          // icon size at rest
-```
-
-#### Adaptive base angle
-
-The menu fans out away from the nearest screen edge. The base angle is computed from the press position relative to screen center:
-
-```tsx
-import { useMemo } from 'react'
-import { Dimensions } from 'react-native'
-
-const { width, height } = Dimensions.get('window')
-
-const baseAngleDeg = useMemo(() => {
-  const cx = width / 2
-  const isTopSixth = pressY < height / 4
-  const isCenterBand = Math.abs(pressX - cx) < width * 0.1
-
-  // User-space angles: 0° = up, increasing counterclockwise
-  const centerAngle = isTopSixth ? 180 : 0
-  const leftFar = isTopSixth ? 230 : 310
-  const rightFar = isTopSixth ? 120 : 60
-
-  const dxNorm = Math.min(1, Math.abs(pressX - cx) / (width / 2))
-
-  let userAngle
-  if (isCenterBand) {
-    userAngle = centerAngle
-  } else if (pressX < cx) {
-    userAngle = lerpAngle(centerAngle, leftFar, dxNorm)
-  } else {
-    userAngle = lerpAngle(centerAngle, rightFar, dxNorm)
-  }
-
-  // Convert to RN coordinate space: 0° = right, 90° = down
-  return (270 - userAngle + 360) % 360
-}, [pressX, pressY, width, height])
-```
-
-If the press is in the bottom-left, buttons fan upward and to the right. Top-center? They fan downward. This keeps the menu always visible and reachable.
-
-#### Button positions from angles
-
-Each button's final position is calculated by distributing actions evenly around the base angle:
-
-```tsx
-const anglesDeg = useMemo(() => {
-  const count = actions.length
-  if (count === 1) return [baseAngleDeg]
-  const half = (count - 1) / 2
-  return Array.from({ length: count }, (_, i) => {
-    return baseAngleDeg + (i - half) * angleStepDeg
-  })
-}, [baseAngleDeg, actions.length, angleStepDeg])
-
-const toXY = (deg) => {
-  const rad = (deg * Math.PI) / 180
-  return {
-    x: pressX + radius * Math.cos(rad),
-    y: pressY + radius * Math.sin(rad),
-  }
+      ))}
+    </View>
+  )
 }
-
-const buttons = actions.map((action, i) => ({
-  id: action.id,
-  icon: action.icon,
-  pos: toXY(anglesDeg[i]),
-}))
 ```
 
-#### Spring entrance animation
-
-All buttons animate from the press point to their final positions using a single shared `animationProgress` value driven by `withSpring`:
-
-```tsx
-import { useSharedValue, withSpring } from 'react-native-reanimated'
-import { useEffect, useRef } from 'react'
-
-const animationProgress = useSharedValue(0)
-const hasAnimatedIn = useRef(false)
-
-useEffect(() => {
-  if (!hasAnimatedIn.current) {
-    hasAnimatedIn.current = true
-    animationProgress.value = withSpring(1, { damping: 80 })
-  }
-}, [animationProgress])
-```
-
-High damping (80) gives a quick settle without bounce — the buttons snap into place rather than oscillating.
-
-#### Button animated style with proximity scaling
-
-Each button blends between the press origin and its final position using `animationProgress`. When the finger is near a button, it scales up (1.0 to 1.4) and nudges away from center:
-
-```tsx
-import { useAnimatedStyle } from 'react-native-reanimated'
-
-const animatedButtonStyle = useAnimatedStyle(() => {
-  const progress = animationProgress.value
-  const startX = pressX - BUTTON_RADIUS
-  const startY = pressY - BUTTON_RADIUS
-  const endX = button.pos.x - BUTTON_RADIUS
-  const endY = button.pos.y - BUTTON_RADIUS
-
-  // Interpolate position from press point to final position
-  const currentX = startX + (endX - startX) * progress
-  const currentY = startY + (endY - startY) * progress
-
-  // Proximity-based scale: grows as finger approaches
-  const cx = cursorX?.value ?? pressX
-  const cy = cursorY?.value ?? pressY
-  const dx = cx - button.pos.x
-  const dy = cy - button.pos.y
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  const hoverThreshold = BUTTON_RADIUS * 2
-  const normalized = Math.max(0, Math.min(1, 1 - dist / hoverThreshold))
-  const proximity = 1 + normalized * 0.4  // 1.0 to 1.4
-  const scale = progress * proximity
-  const opacity = progress
-
-  // Nudge button away from center when finger is close
-  const vx = endX - startX
-  const vy = endY - startY
-  const vlen = Math.max(1, Math.sqrt(vx * vx + vy * vy))
-  const closeness = Math.max(0, Math.min(1, (proximity - 1) / 0.4))
-  const eased = closeness * closeness  // Quadratic ease
-  const offset = 32 * eased * progress
-  const adjX = currentX + (vx / vlen) * offset
-  const adjY = currentY + (vy / vlen) * offset
-
-  const baseSize = BUTTON_RADIUS * 2
-  return {
-    left: adjX,
-    top: adjY,
-    opacity,
-    width: baseSize * scale,
-    height: baseSize * scale,
-  }
-})
-```
-
-The nudge offset pushes the button further along its radial axis as the finger approaches. This prevents the finger from occluding the button and creates a magnetic "push away" feel.
-
-#### Hover detection on the UI thread
-
-Hover state is computed in a worklet via `useAnimatedReaction`, comparing cursor position to each button's center. The nearest button within a threshold becomes active:
-
-```tsx
-import { useAnimatedReaction, SharedValue } from 'react-native-reanimated'
-import { runOnJS } from 'react-native-reanimated'
-import * as Haptics from 'expo-haptics'
-
-const hoveredId = useSharedValue(null)
-const lastHapticId = useSharedValue(null)
-
-useAnimatedReaction(
-  () => cursorX && cursorY ? { x: cursorX.value, y: cursorY.value } : null,
-  (pos) => {
-    if (!pos) return
-    let nearestId = null
-    let nearestDist2 = Infinity
-    const threshold2 = (BUTTON_RADIUS * 3) ** 2
-
-    for (let i = 0; i < buttonCenters.length; i++) {
-      const b = buttonCenters[i]
-      const dx = pos.x - b.x
-      const dy = pos.y - b.y
-      const dist2 = dx * dx + dy * dy
-      if (dist2 < nearestDist2) {
-        nearestDist2 = dist2
-        nearestId = b.id
-      }
-    }
-
-    const active = nearestId && nearestDist2 <= threshold2 ? nearestId : null
-
-    if (hoveredId.value !== active) {
-      hoveredId.value = active
-      if (active && lastHapticId.value !== active) {
-        lastHapticId.value = active
-        runOnJS(Haptics.selectionAsync)()
-      } else if (!active) {
-        lastHapticId.value = null
-      }
-    }
-  }
-)
-```
-
-The `lastHapticId` guard prevents haptic spam — feedback only fires once per button entry, not on every frame.
-
-#### Release signal pattern
-
-Instead of checking hover state on gesture end (which would require bridging), the menu uses a reactive pattern. The pan gesture increments `releaseSignal`, and the menu reacts:
-
-```tsx
-useAnimatedReaction(
-  () => releaseSignal ? releaseSignal.value : -1,
-  (val, prev) => {
-    if (val === -1 || prev == null || val === prev) return
-    if (hoveredId.value) {
-      runOnJS(Haptics.selectionAsync)()
-      runOnJS(onSelect)(hoveredId.value)
-    } else {
-      runOnJS(onCancel)()
-    }
-  }
-)
-```
-
-This decouples the gesture handler from the menu component — they only share the `releaseSignal` shared value.
-
-#### Hover-dependent icon color
-
-Each button renders two icon layers — one colored for the active state, one for inactive. Their opacity toggles based on `hoveredId`:
-
-```tsx
-const activeIconStyle = useAnimatedStyle(() => ({
-  opacity: hoveredId.value === button.id ? 1 : 0,
-  position: 'absolute',
-}))
-
-const inactiveIconStyle = useAnimatedStyle(() => ({
-  opacity: hoveredId.value === button.id ? 0 : 1,
-  position: 'absolute',
-}))
-
-// In the render:
-<Animated.View style={[styles.button, rStyle, animatedButtonStyle]}>
-  <Animated.View style={activeIconStyle}>
-    <Icon size={currentIconSize} color="#000000" />
-  </Animated.View>
-  <Animated.View style={inactiveIconStyle}>
-    <Icon size={currentIconSize} color="#FFFFFF" />
-  </Animated.View>
-</Animated.View>
-```
-
-#### Floating label
-
-When a button is hovered, a title label appears on the opposite side of the screen from the press point. Vertical placement is clamped within the top two-thirds of the screen and near the press Y:
-
-```tsx
-const pressIsLeft = pressX < width / 2
-const labelOnLeft = !pressIsLeft
-
-const maxVerticalDelta = Math.min(160, height * 0.2)
-const labelTop = clamp(
-  invertedPressY,
-  Math.max(36, pressY - maxVerticalDelta),
-  Math.min(height * (2 / 3) - 36, pressY + maxVerticalDelta),
-)
-```
-
-### Part 3: The Blur Overlay
-
-The overlay sits at the root of the component tree and manages a blur backdrop with animated opacity. When activated, it dims the entire screen and renders the menu content above.
-
-#### Animated blur
-
-The overlay uses `Animated.createAnimatedComponent(BlurView)` with `useAnimatedProps` to animate blur intensity:
-
-```tsx
-import { BlurView } from 'expo-blur'
-import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated'
-
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView)
-const blurIntensity = useSharedValue(0)
-const overlayOpacity = useSharedValue(0)
-
-const showOverlay = (content) => {
-  setOverlayContent(content)
-  setIsVisible(true)
-  overlayOpacity.value = withTiming(1, { duration: 300 })
-  blurIntensity.value = withTiming(100, { duration: 300 })
-}
-
-const hideOverlay = () => {
-  overlayOpacity.value = withTiming(0, { duration: 200 })
-  blurIntensity.value = withTiming(0, { duration: 200 })
-  setTimeout(() => {
-    setIsVisible(false)
-    setOverlayContent(null)
-  }, 200)
-}
-
-const blurAnimatedProps = useAnimatedProps(() => ({
-  intensity: blurIntensity.value,
-}))
-```
-
-#### Content scale and rotation
-
-The cloned card gets a subtle scale-up (1.1) and random rotation (-3 to +3 degrees) when the overlay opens, giving visual feedback that the card has been "lifted":
-
-```tsx
-const contentScale = useSharedValue(1)
-const contentRotation = useSharedValue(0)
-
-// On show:
-contentScale.value = withTiming(1.1, { duration: 300 })
-contentRotation.value = withTiming(Math.random() * 6 - 3, { duration: 300 })
-
-const contentStyle = useAnimatedStyle(() => ({
-  opacity: overlayOpacity.value,
-  transform: [
-    { scale: contentScale.value },
-    { rotate: `${contentRotation.value}deg` },
-  ],
-}))
-```
-
-#### Overlay rendering structure
-
-The overlay uses z-index layering to ensure blur sits below content:
-
-```tsx
-<OverlayContext.Provider value={{ showOverlay, hideOverlay }}>
-  {children}
-  {isVisible && (
-    <>
-      {/* Blur layer: z-index 9998 */}
-      <Animated.View style={[StyleSheet.absoluteFillObject, overlayStyle]}>
-        <AnimatedBlurView
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-          animatedProps={blurAnimatedProps}
-        />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
-      </Animated.View>
-
-      {/* Content layer: z-index 9999 */}
-      <Animated.View style={[StyleSheet.absoluteFillObject, contentStyle]}>
-        {overlayContent}
-      </Animated.View>
-    </>
-  )}
-</OverlayContext.Provider>
-```
+</CodePreviewer>
 
 ## Common Pitfalls
 
-- **Use `Gesture.Simultaneous()` to compose long press and pan.** The long press detects activation, the pan tracks movement. Using `Gesture.Race()` between them would kill the pan once the long press ends. Wrap `Gesture.Race(longPress, tap)` with `Gesture.Simultaneous(_, pan)` if you also need a tap gesture on the same element.
+- **Use `Gesture.Simultaneous()` to compose long press and pan.** The long press detects activation, the pan tracks movement. Using `Gesture.Race()` between them would kill the pan once the long press ends.
 
 - **`activateAfterLongPress` on the pan gesture must match the long press duration.** If they differ, the pan either activates too early (breaking scroll) or too late (missing finger movement).
 
-- **Increment `releaseSignal` instead of toggling it.** A boolean toggle can miss changes if the gesture ends and restarts in the same frame. Incrementing ensures `useAnimatedReaction` always sees a new value.
+- **Increment `releaseSignal` instead of toggling it.** A boolean toggle can miss changes if the gesture ends and restarts in the same frame.
 
-- **Guard haptics with `lastHapticId`.** Without it, `Haptics.selectionAsync()` fires every frame the cursor is over a button, causing a constant buzz instead of a single tick on entry.
+- **Guard haptics with `lastHapticId`.** Without it, `Haptics.selectionAsync()` fires every frame the cursor is over a button, causing a constant buzz.
 
-- **`measureInWindow` is async and runs on the JS thread.** You cannot call it from a worklet. Use `runOnJS` to bridge from the long press `onStart` to the JS callback that performs the measurement.
+- **`measureInWindow` is async and runs on the JS thread.** You cannot call it from a worklet. Use `runOnJS` to bridge from the long press `onStart` to the JS callback.
 
 - **Blur overlay must use `Animated.createAnimatedComponent(BlurView)`** to animate the `intensity` prop. Regular `BlurView` with state-driven intensity causes re-renders and flicker.
 
-- **Content clone needs an explicit z-index above the radial menu buttons.** The clone and menu live in the same overlay layer — without z-index ordering, buttons can render on top of the card.
+- **Button size is animated via `width`/`height`** for the proximity effect. `transform: [{ scale }]` doesn't affect hit areas. Acceptable because button count is small (3-5) and the menu is short-lived.
 
-- **Use `withSpring` with high damping (80+) for button entrance.** Low damping causes buttons to oscillate past their targets, which feels sloppy for a menu that should snap into place.
+- **Use `withSpring` with high damping (80+) for button entrance.** Low damping causes buttons to oscillate past their targets.
 
-- **Button size is animated via `width`/`height` for the proximity effect.** This is a deliberate trade-off — `transform: [{ scale }]` would be GPU-only but doesn't affect the hit area. Since button count is small (3-5) and the menu is short-lived, the layout cost is acceptable.
+- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility. For example: `cursorX.set(e.absoluteX)` not `cursorX.value = e.absoluteX`.
-
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers or animation callbacks.
+- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers.

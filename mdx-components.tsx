@@ -1,10 +1,14 @@
 import type { MDXComponents } from 'mdx/types'
 import { VideoDemo } from '@/components/elements/video-demo'
 import { CodeBlock } from '@/components/elements/code-block'
+import { CodePreviewer } from '@/components/elements/code-previewer'
+import { Installer } from '@/components/elements/installer'
 
 export function useMDXComponents(): MDXComponents {
   return {
     VideoDemo,
+    CodePreviewer,
+    Installer,
     h1: ({ children }) => (
       <h1 className="text-4xl/10 tracking-tight font-medium text-taupe-950 dark:text-taupe-50 mt-8 mb-4 text-wrap-balance">
         {children}
@@ -56,7 +60,10 @@ export function useMDXComponents(): MDXComponents {
           {children}
         </code>
       ),
-    pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+    pre: ({ children, ...props }) => {
+      const dataTitle = (props as any)['data-title']
+      return <CodeBlock title={dataTitle}>{children}</CodeBlock>
+    },
     blockquote: ({ children }) => (
       <blockquote className="border-l-2 border-taupe-300 dark:border-taupe-700 pl-4 my-4 text-taupe-600 dark:text-taupe-400 italic">
         {children}

@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import createMDX from "@next/mdx";
+import { resolve } from "path";
+
+const rehypeCodeMeta = resolve(import.meta.dirname, "lib/rehype-code-meta.mjs");
 
 const nextConfig: NextConfig = {
   pageExtensions: ["js", "jsx", "mdx", "ts", "tsx"],
@@ -8,7 +11,7 @@ const nextConfig: NextConfig = {
 const withMDX = createMDX({
   options: {
     remarkPlugins: ["remark-gfm"],
-    rehypePlugins: ["@mapbox/rehype-prism"],
+    rehypePlugins: ["@mapbox/rehype-prism", rehypeCodeMeta],
   },
 });
 
