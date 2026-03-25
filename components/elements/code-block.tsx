@@ -4,27 +4,21 @@ import {
   useRef,
   useState,
   useCallback,
-  useMemo,
-  isValidElement,
+  useLayoutEffect,
   type ReactNode,
 } from 'react'
-
-function extractText(node: ReactNode): string {
-  if (typeof node === 'string') return node
-  if (typeof node === 'number') return String(node)
-  if (!node) return ''
-  if (Array.isArray(node)) return node.map(extractText).join('')
-  if (isValidElement(node)) return extractText((node.props as any).children)
-  return ''
-}
 
 export function CodeBlock({ children, title }: { children: ReactNode; title?: string }) {
   const codeRef = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
+  const [lineCount, setLineCount] = useState(1)
 
-  const lineCount = useMemo(() => {
-    const text = extractText(children)
-    return text.replace(/\n$/, '').split('\n').length
+  useLayoutEffect(() => {
+    const code = codeRef.current?.querySelector('code')
+    if (code) {
+      const text = code.textContent || ''
+      setLineCount(text.replace(/\n$/, '').split('\n').length)
+    }
   }, [children])
 
   const handleCopy = useCallback(() => {

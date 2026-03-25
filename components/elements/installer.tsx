@@ -35,7 +35,7 @@ export function Installer({ packages }: { packages: string[] }) {
   return (
     <div className="mt-10 mb-10">
       <h3 className="text-lg/7 tracking-tight font-medium text-taupe-950 dark:text-taupe-50 mb-6">Install the following dependencies:</h3>
-    <div className="flex items-center justify-between gap-6 rounded-xl bg-taupe-50 p-1 font-mono text-sm/7 text-taupe-600 inset-ring-1 inset-ring-taupe-950/10 dark:bg-taupe-50/[0.02] dark:text-taupe-50 dark:inset-ring-taupe-50/10">
+    <div className="flex items-center justify-between gap-6 rounded-xl bg-taupe-50 p-1 font-mono text-sm/7 text-taupe-600 border-shadow dark:bg-taupe-50/[0.02] dark:text-taupe-50">
       <div
         ref={scrollRef}
         onScroll={updateScrollState}

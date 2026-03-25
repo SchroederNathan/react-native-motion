@@ -1,0 +1,1669 @@
+export const meta = {
+  title: 'Linear Tab Bar',
+  slug: 'linear-tab-bar',
+  description: 'A glassmorphic tab bar with pill-to-menu morph, liquid glass stretch, touch-tracking glow, and search mode transitions.',
+  video: '/videos/linear-tab-bar.mp4',
+  tags: ['tab-bar', 'glass', 'morph', 'gesture', 'haptics', 'spring', 'menu', 'search'],
+}
+
+## Overview
+
+A **glassmorphic tab bar** inspired by Linear's mobile app. A frosted-glass pill holds tab icons that can be tapped or swiped between. Dragging up morphs the pill into a full menu panel with staggered item reveals. A search button expands into a search bar while the pill collapses away. Every interaction features a liquid glass stretch effect — the pill deforms elastically when dragged past its bounds — and a radial glow that follows the touch point.
+
+Key animation behaviors:
+- **Pill-to-menu morph**: The pill scales through a squeeze (scaleX dip at 15%) then expands in height to reveal a staggered menu
+- **Liquid glass stretch**: Overdrag creates a damped elastic deformation with directional stretch and cross-axis compression
+- **Touch-tracking glow**: A radial SVG gradient follows the finger and fades out on release
+- **Search transition**: The pill width animates to zero while the search bar expands, with the close button sliding in
+- **Staggered menu items**: Header, divider, and 7 menu items animate in with 40ms stagger delays, reverse on close
+
+<Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-keyboard-controller', 'expo-blur', 'expo-haptics', 'expo-linear-gradient', 'react-native-svg', '@react-native-masked-view/masked-view', 'lucide-react-native', 'react-native-safe-area-context', 'react-native-worklets']} />
+
+<CodePreviewer>
+
+```tsx title="TabBar.tsx"
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Keyboard, Pressable, StyleSheet } from "react-native";
+import { Gesture, type ComposedGesture } from "react-native-gesture-handler";
+import Animated, {
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import { scheduleOnRN } from "react-native-worklets";
+import * as Haptics from "expo-haptics";
+import {
+  MENU_BORDER_RADIUS,
+  MENU_DRAG_THRESHOLD,
+  MENU_HEIGHT,
+  MAX_SWITCHABLE_TAB,
+  PILL_BORDER_RADIUS,
+  PILL_HEIGHT,
+  PILL_WIDTH,
+  SEARCH_BUTTON_SIZE,
+  SPRING,
+  SPRING_BOUNCY,
+  SPRING_MENU_CLOSE,
+  SPRING_MENU_OPEN,
+  TAB_BAR_BOTTOM_PADDING,
+  TAB_BAR_GAP,
+  TAB_BAR_HORIZONTAL_PADDING,
+  TAB_ZONE_WIDTH,
+  TABS_END,
+  TABS_START,
+} from "./constants";
+import TabBarPill from "./TabBarPill";
+import { SearchButton, CloseSearchButton } from "./SearchBar";
+
+// --- useTabBarAnimation ---
+
+function useTabBarAnimation() {
+  const searchProgress = useSharedValue(0);
+  const menuProgress = useSharedValue(0);
+  const [activeTab, setActiveTab] = useState(0);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const toggleSearch = useCallback(() => {
+    if (menuProgress.get() > 0.5) return;
+    const opening = searchProgress.get() < 0.5;
+    if (!opening) {
+      Keyboard.dismiss();
+    }
+    searchProgress.set(withSpring(opening ? 1 : 0, SPRING));
+    setIsSearchActive(opening);
+  }, [searchProgress, menuProgress]);
+
+  const toggleMenu = useCallback(() => {
+    if (searchProgress.get() > 0.5) return;
+    const opening = menuProgress.get() < 0.5;
+    cancelAnimation(menuProgress);
+    menuProgress.set(withSpring(
+      opening ? 1 : 0,
+      opening ? SPRING_MENU_OPEN : SPRING_MENU_CLOSE,
+    ));
+    setIsMenuOpen(opening);
+  }, [menuProgress, searchProgress]);
+
+  const pillAnimatedStyle = useAnimatedStyle(() => {
+    const sp = searchProgress.get();
+    const mp = menuProgress.get();
+
+    const isMenu = mp > 0.01;
+
+    if (isMenu) {
+      const scaleX = interpolate(mp, [0, 0.15, 0.5, 0.85], [1, 0.7, 0.85, 1], 'clamp');
+      const height = interpolate(mp, [0, 0.1, 1], [PILL_HEIGHT, PILL_HEIGHT, MENU_HEIGHT]);
+      const borderRadius = interpolate(mp, [0, 0.8], [PILL_BORDER_RADIUS, MENU_BORDER_RADIUS], 'clamp');
+
+      return {
+        width: PILL_WIDTH,
+        height,
+        opacity: 1,
+        marginRight: TAB_BAR_GAP,
+        borderRadius,
+        transform: [{ scaleX }],
+      };
+    }
+
+    return {
+      width: interpolate(sp, [0, 0.6], [PILL_WIDTH, 0], 'clamp'),
+      height: PILL_HEIGHT,
+      opacity: interpolate(sp, [0, 0.3], [1, 0], 'clamp'),
+      marginRight: interpolate(sp, [0, 0.6], [TAB_BAR_GAP, 0], 'clamp'),
+      borderRadius: PILL_BORDER_RADIUS,
+      transform: [
+        { translateX: interpolate(sp, [0, 0.6], [0, -PILL_WIDTH * 0.3], 'clamp') },
+      ],
+    };
+  });
+
+  return {
+    searchProgress,
+    menuProgress,
+    activeTab,
+    setActiveTab,
+    isSearchActive,
+    isMenuOpen,
+    toggleSearch,
+    toggleMenu,
+    pillAnimatedStyle,
+  };
+}
+
+// --- usePillGestures ---
+
+function usePillGestures(
+  activeTab: number,
+  setActiveTab: (index: number) => void,
+  searchProgress: ReturnType<typeof useSharedValue<number>>,
+  menuProgress: ReturnType<typeof useSharedValue<number>>,
+  toggleMenu: () => void,
+) {
+  const pillPressed = useSharedValue(0);
+  const overflowX = useSharedValue(0);
+  const overflowY = useSharedValue(0);
+  const touchX = useSharedValue(PILL_WIDTH / 2);
+  const touchY = useSharedValue(PILL_HEIGHT / 2);
+  const glowProgress = useSharedValue(0);
+  const hoveredTab = useSharedValue(-1);
+  const menuTriggeredByDrag = useSharedValue(false);
+
+  const triggerHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const pendingTab = useSharedValue(-1);
+
+  const applyPendingTab = useCallback(() => {
+    const tab = pendingTab.get();
+    if (tab >= 0) {
+      setActiveTab(tab);
+      pendingTab.set(-1);
+    }
+  }, [setActiveTab, pendingTab]);
+
+  const detectAnyTab = useCallback((x: number) => {
+    "worklet";
+    if (x >= TABS_START && x < TABS_END) {
+      return Math.min(
+        MAX_SWITCHABLE_TAB,
+        Math.floor((x - TABS_START) / TAB_ZONE_WIDTH),
+      );
+    }
+    if (x >= TABS_END && x <= PILL_WIDTH) {
+      return 3;
+    }
+    return -1;
+  }, []);
+
+  const panGesture = useMemo(() => {
+    const longPress = Gesture.LongPress()
+      .minDuration(0)
+      .onStart((e) => {
+        cancelAnimation(overflowX);
+        cancelAnimation(overflowY);
+        cancelAnimation(glowProgress);
+
+        touchX.set(e.x);
+        touchY.set(e.y);
+        pillPressed.set(withTiming(1, { duration: 80 }));
+        glowProgress.set(1);
+
+        if (searchProgress.get() < 0.5) {
+          hoveredTab.set(detectAnyTab(e.x));
+        }
+      });
+
+    const pan = Gesture.Pan()
+      .minDistance(10)
+      .onStart((e) => {
+        cancelAnimation(overflowX);
+        cancelAnimation(overflowY);
+        cancelAnimation(glowProgress);
+
+        touchX.set(e.x);
+        touchY.set(e.y);
+        pillPressed.set(withTiming(1, { duration: 80 }));
+        glowProgress.set(1);
+      })
+      .onUpdate((e) => {
+        const x = e.x;
+        const y = e.y;
+
+        touchX.set(x);
+        touchY.set(y);
+
+        let ovX = 0;
+        if (x < 0) ovX = x;
+        else if (x > PILL_WIDTH) ovX = x - PILL_WIDTH;
+
+        let ovY = 0;
+        if (y < 0) ovY = y;
+        else if (y > PILL_HEIGHT) ovY = y - PILL_HEIGHT;
+
+        overflowX.set(ovX);
+        overflowY.set(ovY);
+
+        if (searchProgress.get() >= 0.5) return;
+
+        if (
+          ovY < MENU_DRAG_THRESHOLD &&
+          !menuTriggeredByDrag.get() &&
+          menuProgress.get() < 0.5
+        ) {
+          menuTriggeredByDrag.set(true);
+          hoveredTab.set(-1);
+          scheduleOnRN(toggleMenu);
+          scheduleOnRN(triggerHaptic);
+          overflowX.set(withSpring(0, SPRING_BOUNCY));
+          overflowY.set(withSpring(0, SPRING_BOUNCY));
+          pillPressed.set(withTiming(0, { duration: 150 }));
+          return;
+        }
+
+        if (menuTriggeredByDrag.get()) return;
+
+        if (ovX === 0 && ovY === 0) {
+          const newTab = detectAnyTab(x);
+          if (newTab !== hoveredTab.get()) {
+            hoveredTab.set(newTab);
+            scheduleOnRN(triggerHaptic);
+          }
+        } else {
+          if (hoveredTab.get() !== -1) {
+            hoveredTab.set(-1);
+          }
+        }
+      })
+      .onEnd(() => {
+        const wasDragMenu = menuTriggeredByDrag.get();
+        menuTriggeredByDrag.set(false);
+
+        const commitTab = hoveredTab.get();
+        pillPressed.set(withTiming(0, { duration: 150 }));
+        glowProgress.set(withTiming(2, { duration: 300 }));
+        overflowX.set(withSpring(0, SPRING_BOUNCY));
+        overflowY.set(withSpring(0, SPRING_BOUNCY));
+
+        if (wasDragMenu) {
+          hoveredTab.set(-1);
+          return;
+        }
+        if (searchProgress.get() >= 0.5) {
+          hoveredTab.set(-1);
+          return;
+        }
+
+        if (commitTab >= 0 && commitTab <= 2) {
+          pendingTab.set(commitTab);
+          scheduleOnRN(applyPendingTab);
+          scheduleOnRN(triggerHaptic);
+        } else {
+          hoveredTab.set(-1);
+          if (commitTab === 3) {
+            scheduleOnRN(toggleMenu);
+            scheduleOnRN(triggerHaptic);
+          }
+        }
+      });
+
+    return Gesture.Simultaneous(longPress, pan);
+  }, [
+    overflowX, overflowY, touchX, touchY, pillPressed, glowProgress,
+    hoveredTab, menuTriggeredByDrag, detectAnyTab, searchProgress,
+    menuProgress, toggleMenu, triggerHaptic, pendingTab, applyPendingTab,
+  ]);
+
+  return {
+    pillPressed, overflowX, overflowY, touchX, touchY,
+    glowProgress, hoveredTab, panGesture,
+  };
+}
+
+// --- useSearchGestures ---
+
+function useSearchGestures(onToggleSearch: () => void) {
+  const pressed = useSharedValue(0);
+  const overflowX = useSharedValue(0);
+  const overflowY = useSharedValue(0);
+  const touchX = useSharedValue(SEARCH_BUTTON_SIZE / 2);
+  const touchY = useSharedValue(PILL_HEIGHT / 2);
+  const glowProgress = useSharedValue(0);
+
+  const triggerHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const tapGesture = useMemo(() => {
+    return Gesture.Tap()
+      .onBegin(() => {
+        touchX.set(SEARCH_BUTTON_SIZE / 2);
+        touchY.set(PILL_HEIGHT / 2);
+        pressed.set(withTiming(1, { duration: 80 }));
+        cancelAnimation(glowProgress);
+        glowProgress.set(1);
+      })
+      .onFinalize(() => {
+        pressed.set(withTiming(0, { duration: 150 }));
+        glowProgress.set(withTiming(2, { duration: 300 }));
+      })
+      .onEnd(() => {
+        scheduleOnRN(triggerHaptic);
+        scheduleOnRN(onToggleSearch);
+      });
+  }, [pressed, touchX, touchY, glowProgress, triggerHaptic, onToggleSearch]);
+
+  const panGesture = useMemo(() => {
+    return Gesture.Pan()
+      .minDistance(10)
+      .onStart((e) => {
+        cancelAnimation(overflowX);
+        cancelAnimation(overflowY);
+        cancelAnimation(glowProgress);
+
+        touchX.set(e.x);
+        touchY.set(e.y);
+        pressed.set(withTiming(1, { duration: 80 }));
+        glowProgress.set(1);
+      })
+      .onUpdate((e) => {
+        touchX.set(e.x);
+        touchY.set(e.y);
+
+        let ovX = 0;
+        if (e.x < 0) ovX = e.x;
+        else if (e.x > SEARCH_BUTTON_SIZE) ovX = e.x - SEARCH_BUTTON_SIZE;
+
+        let ovY = 0;
+        if (e.y < 0) ovY = e.y;
+        else if (e.y > PILL_HEIGHT) ovY = e.y - PILL_HEIGHT;
+
+        overflowX.set(ovX);
+        overflowY.set(ovY);
+      })
+      .onEnd(() => {
+        pressed.set(withTiming(0, { duration: 150 }));
+        glowProgress.set(withTiming(2, { duration: 300 }));
+        overflowX.set(withSpring(0, SPRING_BOUNCY));
+        overflowY.set(withSpring(0, SPRING_BOUNCY));
+      });
+  }, [overflowX, overflowY, touchX, touchY, pressed, glowProgress]);
+
+  const composedGesture: ComposedGesture = useMemo(
+    () => Gesture.Race(panGesture, tapGesture),
+    [panGesture, tapGesture],
+  );
+
+  return {
+    pressed, overflowX, overflowY, touchX, touchY,
+    glowProgress, composedGesture,
+  };
+}
+
+// --- TabBar Component ---
+
+interface TabBarProps {
+  onTabChange?: (index: number) => void;
+}
+
+export default function TabBar({ onTabChange }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom * 0.7, TAB_BAR_BOTTOM_PADDING);
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+
+  const {
+    searchProgress, menuProgress, activeTab, setActiveTab,
+    isSearchActive, isMenuOpen, toggleSearch, toggleMenu, pillAnimatedStyle,
+  } = useTabBarAnimation();
+
+  const handleTabPress = useCallback((index: number) => {
+    if (index === 3) {
+      toggleMenu();
+    } else {
+      setActiveTab(index);
+    }
+  }, [toggleMenu, setActiveTab]);
+
+  const {
+    pillPressed, overflowX, overflowY, touchX, touchY,
+    glowProgress, hoveredTab, panGesture,
+  } = usePillGestures(activeTab, setActiveTab, searchProgress, menuProgress, toggleMenu);
+
+  useEffect(() => {
+    hoveredTab.set(-1);
+  }, [activeTab, hoveredTab]);
+
+  useEffect(() => {
+    onTabChange?.(activeTab);
+  }, [activeTab, onTabChange]);
+
+  const {
+    pressed: searchPressed, overflowX: searchOverflowX, overflowY: searchOverflowY,
+    touchX: searchTouchX, touchY: searchTouchY, glowProgress: searchGlowProgress,
+    composedGesture: searchComposedGesture,
+  } = useSearchGestures(toggleSearch);
+
+  const {
+    pressed: closePressed, overflowX: closeOverflowX, overflowY: closeOverflowY,
+    touchX: closeTouchX, touchY: closeTouchY, glowProgress: closeGlowProgress,
+    composedGesture: closeComposedGesture,
+  } = useSearchGestures(toggleSearch);
+
+  const keyboardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: keyboardHeight.get() }],
+  }));
+
+  return (
+    <>
+      <Animated.View style={[styles.container, { paddingBottom: bottomPadding }, keyboardStyle]}>
+        <TabBarPill
+          activeTab={activeTab}
+          onTabPress={handleTabPress}
+          searchProgress={searchProgress}
+          menuProgress={menuProgress}
+          pillAnimatedStyle={pillAnimatedStyle}
+          pillPressed={pillPressed}
+          overflowX={overflowX}
+          overflowY={overflowY}
+          touchX={touchX}
+          touchY={touchY}
+          glowProgress={glowProgress}
+          hoveredTab={hoveredTab}
+          panGesture={panGesture}
+        />
+        <SearchButton
+          searchProgress={searchProgress}
+          isSearchActive={isSearchActive}
+          pressed={searchPressed}
+          overflowX={searchOverflowX}
+          overflowY={searchOverflowY}
+          touchX={searchTouchX}
+          touchY={searchTouchY}
+          glowProgress={searchGlowProgress}
+          composedGesture={searchComposedGesture}
+        />
+        <CloseSearchButton
+          searchProgress={searchProgress}
+          pressed={closePressed}
+          overflowX={closeOverflowX}
+          overflowY={closeOverflowY}
+          touchX={closeTouchX}
+          touchY={closeTouchY}
+          glowProgress={closeGlowProgress}
+          composedGesture={closeComposedGesture}
+        />
+      </Animated.View>
+      {isMenuOpen && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={toggleMenu}
+        />
+      )}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingHorizontal: TAB_BAR_HORIZONTAL_PADDING,
+  },
+});
+```
+
+```ts title="constants.ts"
+import { Dimensions } from 'react-native';
+import { interpolate } from 'react-native-reanimated';
+
+// --- Layout ---
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+export const TAB_BAR_HORIZONTAL_PADDING = 16;
+export const TAB_BAR_GAP = 12;
+
+export const PILL_HEIGHT = 52;
+export const SEARCH_ACTIVE_HEIGHT = 42;
+export const PILL_BORDER_RADIUS = PILL_HEIGHT / 2;
+export const SEARCH_ACTIVE_RADIUS = SEARCH_ACTIVE_HEIGHT / 2;
+
+export const ICON_SIZE = 22;
+export const ICON_SPACING = 52;
+export const ICON_STROKE_WIDTH = 3;
+export const ICON_PADDING = 4;
+
+export const SEARCH_BUTTON_SIZE = 52;
+export const SEARCH_BAR_RADIUS = PILL_BORDER_RADIUS;
+
+export const TOTAL_WIDTH = SCREEN_WIDTH - 2 * TAB_BAR_HORIZONTAL_PADDING;
+
+export const PILL_WIDTH = TOTAL_WIDTH - TAB_BAR_GAP - SEARCH_BUTTON_SIZE;
+
+export const CLOSE_BUTTON_SIZE = SEARCH_BUTTON_SIZE;
+
+export const SEARCH_BAR_WIDTH = TOTAL_WIDTH - TAB_BAR_GAP - CLOSE_BUTTON_SIZE;
+
+export const TAB_BAR_BOTTOM_PADDING = 8;
+
+export const MENU_WIDTH = TOTAL_WIDTH;
+export const MENU_HEIGHT = 420;
+export const MENU_BORDER_RADIUS = 38;
+export const MENU_ITEM_HEIGHT = 48;
+
+// --- Tab Zone Constants ---
+
+export const MAX_SWITCHABLE_TAB = 2;
+export const CIRCLE_SIZE = PILL_HEIGHT - 8;
+
+export const TABS_START = ICON_PADDING;
+export const TABS_END = PILL_WIDTH - ICON_PADDING - CIRCLE_SIZE;
+export const TAB_ZONE_WIDTH = (TABS_END - TABS_START) / 3;
+
+export const MENU_DRAG_THRESHOLD = -50;
+
+export const TAB_CENTER_XS = [
+  TABS_START + TAB_ZONE_WIDTH * 0.5,
+  TABS_START + TAB_ZONE_WIDTH * 1.5,
+  TABS_START + TAB_ZONE_WIDTH * 2.5,
+  PILL_WIDTH - ICON_PADDING - CIRCLE_SIZE / 2,
+] as const;
+
+// --- Theme ---
+
+export const COLORS = {
+  background: '#0A0A0A',
+  surface: 'rgba(255, 255, 255, 0.06)',
+  surfaceHover: 'rgba(255, 255, 255, 0.12)',
+  textPrimary: 'rgba(255, 255, 255, 0.9)',
+  textSecondary: 'rgba(255, 255, 255, 0.4)',
+  border: 'rgba(255, 255, 255, 0.12)',
+  glassGradientTop: 'rgba(255, 255, 255, 0.11)',
+  glassGradientBottom: 'rgba(255, 255, 255, 0.05)',
+  accentBlue: '#3B82F6',
+  iconDefault: 'rgba(255, 255, 255, 0.9)',
+  iconActive: 'rgba(255, 255, 255, 0.9)',
+  borderGradientBright: 'rgba(255, 255, 255, 0.15)',
+  borderGradientDim: 'rgba(255, 255, 255, 0.01)',
+  borderGradientMedium: 'rgba(255, 255, 255, 0.06)',
+} as const;
+
+export const SPRING = {
+  damping: 24,
+  stiffness: 170,
+  mass: 1,
+} as const;
+
+export const SPRING_BOUNCY = {
+  damping: 22,
+  stiffness: 250,
+  mass: 0.6,
+} as const;
+
+export const SPRING_MENU_OPEN = {
+  damping: 14,
+  stiffness: 170,
+  mass: 0.7,
+} as const;
+
+export const SPRING_MENU_CLOSE = {
+  damping: 22,
+  stiffness: 120,
+  mass: 0.9,
+} as const;
+
+// --- Liquid Glass ---
+
+const MAX_PULL = 60;
+const MAX_STRETCH = 0.1;
+const MAX_COMPRESS = 0.12;
+
+export function liquidGlassTransform(
+  pressed: number,
+  overflowX: number,
+  overflowY: number,
+  halfW: number,
+  halfH: number,
+) {
+  "worklet";
+
+  const pressScale = interpolate(pressed, [0, 1], [1, 1.02]);
+
+  const signX = overflowX < 0 ? -1 : 1;
+  const dampedX = signX * MAX_PULL * (1 - 1 / (Math.abs(overflowX) / MAX_PULL + 1));
+  const signY = overflowY < 0 ? -1 : 1;
+  const dampedY = signY * MAX_PULL * (1 - 1 / (Math.abs(overflowY) / MAX_PULL + 1));
+
+  const absDX = Math.abs(dampedX);
+  const absDY = Math.abs(dampedY);
+
+  const stretchX = interpolate(absDX, [0, MAX_PULL], [0, MAX_STRETCH], "clamp");
+  const stretchY = interpolate(absDY, [0, MAX_PULL], [0, MAX_STRETCH], "clamp");
+
+  const compressX = interpolate(absDY, [0, MAX_PULL], [0, MAX_COMPRESS], "clamp");
+  const compressY = interpolate(absDX, [0, MAX_PULL], [0, MAX_COMPRESS], "clamp");
+
+  return {
+    transform: [
+      { translateX: signX * halfW * stretchX },
+      { translateY: signY * halfH * stretchY },
+      { scaleX: pressScale * (1 + stretchX) * (1 - compressX) },
+      { scaleY: pressScale * (1 + stretchY) * (1 - compressY) },
+    ],
+  };
+}
+```
+
+```tsx title="TabBarPill.tsx"
+import {
+  Box,
+  ChevronsUpDown,
+  ScanFace,
+  Star,
+  type LucideIcon,
+} from "lucide-react-native";
+import { StyleSheet, View } from "react-native";
+import { GestureDetector, type GestureType, type ComposedGesture } from "react-native-gesture-handler";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useDerivedValue,
+  type AnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
+import {
+  ICON_PADDING,
+  MENU_BORDER_RADIUS,
+  PILL_BORDER_RADIUS,
+  PILL_HEIGHT,
+  PILL_WIDTH,
+  liquidGlassTransform,
+} from "./constants";
+import GlassMaterial from "./GlassMaterial";
+import { GlowOverlay } from "./SearchBar";
+import MenuPanel from "./MenuPanel";
+import TabIcon from "./TabIcon";
+
+const TAB_ICONS: LucideIcon[] = [Box, ScanFace, Star, ChevronsUpDown];
+
+const HALF_W = PILL_WIDTH / 2;
+const HALF_H = PILL_HEIGHT / 2;
+
+const GLOW_SIZE = 200;
+
+interface TabBarPillProps {
+  activeTab: number;
+  onTabPress: (index: number) => void;
+  searchProgress: SharedValue<number>;
+  menuProgress: SharedValue<number>;
+  pillAnimatedStyle: AnimatedStyle;
+  pillPressed: SharedValue<number>;
+  overflowX: SharedValue<number>;
+  overflowY: SharedValue<number>;
+  touchX: SharedValue<number>;
+  touchY: SharedValue<number>;
+  glowProgress: SharedValue<number>;
+  hoveredTab: SharedValue<number>;
+  panGesture: ComposedGesture | GestureType;
+}
+
+export default function TabBarPill({
+  activeTab,
+  onTabPress,
+  searchProgress,
+  menuProgress,
+  pillAnimatedStyle,
+  pillPressed,
+  overflowX,
+  overflowY,
+  touchX,
+  touchY,
+  glowProgress,
+  hoveredTab,
+  panGesture,
+}: TabBarPillProps) {
+  const animatedBorderRadius = useDerivedValue(() =>
+    interpolate(menuProgress.get(), [0, 0.8], [PILL_BORDER_RADIUS, MENU_BORDER_RADIUS], 'clamp')
+  );
+
+  const pillGlassStyle = useAnimatedStyle(() => {
+    if (menuProgress.get() > 0.5) {
+      return {
+        transform: [
+          { translateX: 0 },
+          { translateY: 0 },
+          { scaleX: 1 },
+          { scaleY: 1 },
+        ],
+      };
+    }
+
+    return liquidGlassTransform(
+      pillPressed.get(), overflowX.get(), overflowY.get(), HALF_W, HALF_H,
+    );
+  });
+
+  return (
+    <GestureDetector gesture={panGesture}>
+      <Animated.View style={pillGlassStyle}>
+        <Animated.View
+          style={[
+            styles.pill,
+            pillAnimatedStyle,
+            styles.pillSurface,
+          ]}
+        >
+          <GlassMaterial
+            borderRadius={animatedBorderRadius}
+            style={styles.glassMaterial}
+          >
+            <View style={styles.iconsRow}>
+              {TAB_ICONS.map((Icon, index) => (
+                <TabIcon
+                  key={index}
+                  index={index}
+                  icon={Icon}
+                  isActive={index < 3 && activeTab === index}
+                  onPress={onTabPress}
+                  searchProgress={searchProgress}
+                  menuProgress={menuProgress}
+                  showDot={index === 3}
+                  isCircle={index === 3}
+                  pillPressed={pillPressed}
+                  touchX={touchX}
+                  touchY={touchY}
+                  glowProgress={glowProgress}
+                  hoveredTab={hoveredTab}
+                />
+              ))}
+            </View>
+            <MenuPanel menuProgress={menuProgress} />
+          </GlassMaterial>
+          <GlowOverlay
+            size={GLOW_SIZE}
+            id="pillGlow"
+            touchX={touchX}
+            touchY={touchY}
+            glowProgress={glowProgress}
+          />
+        </Animated.View>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+const styles = StyleSheet.create({
+  pill: {
+    justifyContent: "flex-start",
+  },
+  pillSurface: {
+    overflow: "hidden",
+  },
+  glassMaterial: {
+    flex: 1,
+    alignSelf: "stretch",
+    minWidth: 0,
+  },
+  iconsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: PILL_HEIGHT,
+    paddingHorizontal: ICON_PADDING,
+    paddingVertical: 4,
+    gap: 0,
+  },
+});
+```
+
+```tsx title="TabIcon.tsx"
+import * as Haptics from "expo-haptics";
+import { type LucideIcon } from "lucide-react-native";
+import { useCallback, useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
+import {
+  COLORS,
+  ICON_SIZE,
+  ICON_STROKE_WIDTH,
+  PILL_BORDER_RADIUS,
+  PILL_HEIGHT,
+  PILL_WIDTH,
+  TAB_CENTER_XS,
+} from "./constants";
+
+interface TabIconProps {
+  index: number;
+  icon: LucideIcon;
+  isActive: boolean;
+  onPress: (index: number) => void;
+  searchProgress: SharedValue<number>;
+  menuProgress: SharedValue<number>;
+  showDot: boolean;
+  isCircle: boolean;
+  pillPressed: SharedValue<number>;
+  touchX: SharedValue<number>;
+  touchY: SharedValue<number>;
+  glowProgress: SharedValue<number>;
+  hoveredTab: SharedValue<number>;
+}
+
+export default function TabIcon({
+  index,
+  icon: Icon,
+  isActive,
+  onPress,
+  searchProgress,
+  menuProgress,
+  showDot,
+  isCircle,
+  pillPressed,
+  touchX,
+  touchY,
+  glowProgress,
+  hoveredTab,
+}: TabIconProps) {
+  const circlePressed = useSharedValue(0);
+
+  const triggerHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const handlePress = useCallback(() => {
+    onPress(index);
+  }, [index, onPress]);
+
+  const tap = useMemo(() => Gesture.Tap()
+    .onBegin(() => {
+      touchX.set(TAB_CENTER_XS[index]);
+      touchY.set(PILL_HEIGHT / 2);
+      pillPressed.set(withTiming(1, { duration: 80 }));
+      cancelAnimation(glowProgress);
+      glowProgress.set(1);
+      if (isCircle) {
+        cancelAnimation(circlePressed);
+        circlePressed.set(1);
+      }
+    })
+    .onFinalize((_event, success) => {
+      pillPressed.set(withTiming(0, { duration: 150 }));
+      glowProgress.set(withTiming(2, { duration: 300 }));
+      hoveredTab.set(-1);
+      if (isCircle) {
+        circlePressed.set(withTiming(0, { duration: 200 }));
+      }
+      scheduleOnRN(triggerHaptic);
+      scheduleOnRN(handlePress);
+    }), [triggerHaptic, handlePress]);
+
+  const iconAnimatedStyle = useAnimatedStyle(() => {
+    const sp = searchProgress.get();
+    const mp = menuProgress.get();
+
+    if (mp > 0.01) {
+      const centerX = PILL_WIDTH / 2;
+      const iconX = TAB_CENTER_XS[index];
+      const toCenter = centerX - iconX;
+      return {
+        opacity: interpolate(mp, [0.15, 0.5], [1, 0], "clamp"),
+        transform: [
+          { translateX: interpolate(mp, [0.15, 0.5], [0, toCenter], "clamp") },
+          { scale: interpolate(mp, [0.15, 0.5], [1, 0.3], "clamp") },
+        ],
+      };
+    }
+
+    if (index === 0) {
+      return { opacity: 1, transform: [{ scale: 1 }] };
+    }
+    return {
+      opacity: interpolate(sp, [0, 0.3], [1, 0]),
+      transform: [{ scale: interpolate(sp, [0, 0.3], [1, 0.5]) }],
+      flex: isCircle ? undefined : interpolate(sp, [0, 0.3], [1, 0]),
+      width: isCircle
+        ? interpolate(sp, [0, 0.3], [CIRCLE_SIZE, 0])
+        : undefined,
+      overflow: "hidden" as const,
+    };
+  });
+
+  const activeBgStyle = useAnimatedStyle(() => ({
+    opacity: hoveredTab.get() === -1 ? 1 : 0,
+  }));
+
+  const hoverBgStyle = useAnimatedStyle(() => {
+    const hovered = hoveredTab.get() === index ? 1 : 0;
+    return {
+      opacity: isCircle ? Math.max(circlePressed.get(), hovered) : hovered,
+    };
+  });
+
+  const iconColor = isActive ? COLORS.iconActive : COLORS.iconDefault;
+
+  return (
+    <GestureDetector gesture={tap}>
+      <Animated.View
+        style={[
+          isCircle ? styles.circleContainer : styles.container,
+          iconAnimatedStyle,
+        ]}
+      >
+        {isActive && (
+          <Animated.View
+            style={[
+              styles.activeBackground,
+              isCircle && styles.circleBackground,
+              activeBgStyle,
+            ]}
+          />
+        )}
+        <Animated.View
+          style={[
+            styles.activeBackground,
+            isCircle && styles.circleBackground,
+            hoverBgStyle,
+          ]}
+        />
+        <View style={styles.iconWrapper}>
+          <Icon
+            size={ICON_SIZE}
+            color={iconColor}
+            strokeWidth={ICON_STROKE_WIDTH}
+          />
+        </View>
+      </Animated.View>
+    </GestureDetector>
+  );
+}
+
+const CIRCLE_SIZE = PILL_HEIGHT - 8;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: PILL_BORDER_RADIUS,
+  },
+  circleContainer: {
+    width: CIRCLE_SIZE,
+    height: CIRCLE_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: CIRCLE_SIZE / 2,
+  },
+  activeBackground: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: COLORS.surfaceHover,
+    borderRadius: PILL_BORDER_RADIUS,
+  },
+  circleBackground: {
+    borderRadius: CIRCLE_SIZE / 2,
+  },
+  iconWrapper: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+```
+
+```tsx title="GlassMaterial.tsx"
+import { BlurView } from "expo-blur";
+import { LinearGradient } from "expo-linear-gradient";
+import { StyleSheet, View, type ViewStyle } from "react-native";
+import Animated, { type AnimatedStyle, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
+import MaskedView from "@react-native-masked-view/masked-view";
+import { COLORS } from "./constants";
+import { type ReactNode, useMemo } from "react";
+
+const FILL_GRADIENT_START = { x: 0.5, y: 0 };
+const FILL_GRADIENT_END = { x: 0.5, y: 1 };
+
+const BORDER_GRADIENT_START = { x: 0.49, y: 0 };
+const BORDER_GRADIENT_END = { x: 0.51, y: 1 };
+interface GlassMaterialProps {
+  children: ReactNode;
+  style?: ViewStyle | AnimatedStyle | (ViewStyle | AnimatedStyle)[];
+  borderRadius?: number | SharedValue<number>;
+}
+
+export default function GlassMaterial({ children, style, borderRadius = 32 }: GlassMaterialProps) {
+  const isAnimated = typeof borderRadius === 'object' && 'get' in borderRadius;
+  const staticRadius = isAnimated ? undefined : borderRadius;
+
+  const fill = useMemo(
+    () => [StyleSheet.absoluteFill, { borderRadius: staticRadius, overflow: "hidden" as const }],
+    [staticRadius]
+  );
+
+  const animatedOuter = useAnimatedStyle(() => {
+    if (!isAnimated) return {};
+    return { borderRadius: (borderRadius as SharedValue<number>).get(), overflow: "hidden" as const };
+  });
+
+  const animatedBorderMask = useAnimatedStyle(() => {
+    if (!isAnimated) return {};
+    return { borderRadius: (borderRadius as SharedValue<number>).get() };
+  });
+
+  return (
+    <Animated.View
+      style={[{ borderRadius: staticRadius, overflow: "hidden" }, isAnimated && animatedOuter, style]}
+      collapsable={false}
+    >
+      <BlurView tint="dark" intensity={40} style={fill} />
+      <LinearGradient
+        colors={[COLORS.glassGradientTop, COLORS.glassGradientBottom]}
+        start={FILL_GRADIENT_START}
+        end={FILL_GRADIENT_END}
+        style={fill}
+      />
+      <MaskedView
+        style={StyleSheet.absoluteFill}
+        maskElement={
+          <Animated.View
+            style={[
+              { flex: 1, borderWidth: 1, borderColor: 'black', borderRadius: staticRadius },
+              isAnimated && animatedBorderMask,
+            ]}
+          />
+        }
+        pointerEvents="none"
+      >
+        <LinearGradient
+          colors={[COLORS.borderGradientBright, COLORS.borderGradientDim, COLORS.borderGradientMedium]}
+          start={BORDER_GRADIENT_START}
+          end={BORDER_GRADIENT_END}
+          locations={[0, 0.5, 1]}
+          style={{ flex: 1 }}
+        />
+      </MaskedView>
+      <View style={styles.content} pointerEvents="box-none">
+        {children}
+      </View>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: StyleSheet.absoluteFillObject,
+});
+```
+
+```tsx title="MenuPanel.tsx"
+import {
+  Inbox,
+  CircleDot,
+  Star,
+  FolderKanban,
+  Layers,
+  Users,
+  Settings,
+  SlidersHorizontal,
+  type LucideIcon,
+  ChevronsUpDown,
+} from "lucide-react-native";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  interpolate,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
+import { MENU_ITEM_HEIGHT, COLORS } from "./constants";
+
+interface MenuItemData {
+  icon: LucideIcon;
+  label: string;
+  highlighted?: boolean;
+}
+
+const MENU_ITEMS: MenuItemData[] = [
+  { icon: Inbox, label: "Inbox" },
+  { icon: CircleDot, label: "My Issues" },
+  { icon: Star, label: "Favorites", highlighted: true },
+  { icon: FolderKanban, label: "Projects" },
+  { icon: Layers, label: "Views" },
+  { icon: Users, label: "Teams" },
+  { icon: Settings, label: "Settings" },
+];
+
+const STAGGER_IN_MS = 40;
+const STAGGER_OUT_MS = 10;
+const ITEM_IN_DURATION = 250;
+const ITEM_OUT_DURATION = 80;
+
+interface MenuPanelProps {
+  menuProgress: SharedValue<number>;
+}
+
+const MenuItem = React.memo(function MenuItem({
+  item,
+  itemProgress,
+}: {
+  item: MenuItemData;
+  itemProgress: SharedValue<number>;
+}) {
+  const Icon = item.icon;
+
+  const style = useAnimatedStyle(() => {
+    const p = itemProgress.get();
+    return {
+      opacity: p,
+      transform: [
+        { translateY: interpolate(p, [0, 1], [-10, 0]) },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.menuItem,
+        item.highlighted && styles.menuItemHighlighted,
+        style,
+      ]}
+    >
+      <Icon
+        size={20}
+        color={COLORS.iconDefault}
+        strokeWidth={2.5}
+      />
+      <Text style={styles.menuItemLabel}>{item.label}</Text>
+    </Animated.View>
+  );
+});
+
+export default function MenuPanel({ menuProgress }: MenuPanelProps) {
+  const headerProgress = useSharedValue(0);
+  const dividerProgress = useSharedValue(0);
+  const itemProgresses = [
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+    useSharedValue(0),
+  ];
+
+  const containerProgress = useSharedValue(0);
+  const wasOpen = useSharedValue(false);
+
+  useAnimatedReaction(
+    () => menuProgress.get(),
+    (current, previous) => {
+      const prev = previous ?? 0;
+      const goingUp = current > prev;
+
+      if (goingUp && current > 0.1 && !wasOpen.get()) {
+        wasOpen.set(true);
+        containerProgress.set(withTiming(1, { duration: 200 }));
+        headerProgress.set(withDelay(0 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        dividerProgress.set(withDelay(1 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[0].set(withDelay(2 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[1].set(withDelay(3 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[2].set(withDelay(4 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[3].set(withDelay(5 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[4].set(withDelay(6 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[5].set(withDelay(7 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+        itemProgresses[6].set(withDelay(8 * STAGGER_IN_MS, withTiming(1, { duration: ITEM_IN_DURATION })));
+      } else if (!goingUp && current < 0.95 && wasOpen.get()) {
+        wasOpen.set(false);
+        containerProgress.set(withTiming(0, { duration: 150 }));
+        itemProgresses[6].set(withDelay(0 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[5].set(withDelay(1 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[4].set(withDelay(2 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[3].set(withDelay(3 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[2].set(withDelay(4 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[1].set(withDelay(5 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        itemProgresses[0].set(withDelay(6 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        dividerProgress.set(withDelay(7 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+        headerProgress.set(withDelay(8 * STAGGER_OUT_MS, withTiming(0, { duration: ITEM_OUT_DURATION })));
+      }
+    },
+  );
+
+  const containerStyle = useAnimatedStyle(() => {
+    const p = menuProgress.get();
+    return {
+      opacity: p,
+      transform: [
+        { scale: interpolate(p, [0, 1], [0.8, 1]) },
+        { translateY: interpolate(p, [0, 1], [-200, 0]) },
+      ],
+    };
+  });
+
+  const headerStyle = useAnimatedStyle(() => {
+    const p = headerProgress.get();
+    return {
+      opacity: p,
+      transform: [
+        { translateY: interpolate(p, [0, 1], [-10, 0]) },
+      ],
+    };
+  });
+
+  const dividerStyle = useAnimatedStyle(() => ({
+    opacity: dividerProgress.get(),
+  }));
+
+  return (
+    <Animated.View style={[styles.container, containerStyle]}>
+      <Animated.View style={[styles.header, headerStyle]}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerName}>SchroederNathan</Text>
+          <ChevronsUpDown
+            size={14}
+            color={COLORS.textPrimary}
+            strokeWidth={2.5}
+          />
+        </View>
+        <SlidersHorizontal
+          size={20}
+          color={COLORS.textPrimary}
+          strokeWidth={2.5}
+        />
+      </Animated.View>
+
+      <Animated.View style={[styles.dividerContainer, dividerStyle]}>
+        <View style={styles.divider} />
+      </Animated.View>
+
+      {MENU_ITEMS.map((item, index) => (
+        <MenuItem
+          key={item.label}
+          item={item}
+          itemProgress={itemProgresses[index]}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: COLORS.textPrimary,
+  },
+  dividerContainer: {
+    paddingBottom: 8,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: COLORS.border,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: MENU_ITEM_HEIGHT,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    gap: 14,
+  },
+  menuItemHighlighted: {
+    backgroundColor: COLORS.surfaceHover,
+  },
+  menuItemLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: COLORS.textPrimary,
+  },
+});
+```
+
+```tsx title="SearchBar.tsx"
+import { Search, X } from "lucide-react-native";
+import { useEffect, useRef } from "react";
+import { StyleSheet, TextInput, View } from "react-native";
+import { GestureDetector, type ComposedGesture } from "react-native-gesture-handler";
+import Animated, {
+  interpolate,
+  useAnimatedStyle,
+  useDerivedValue,
+  type SharedValue,
+} from "react-native-reanimated";
+import Svg, { Defs, RadialGradient, Stop, Rect } from "react-native-svg";
+import {
+  CLOSE_BUTTON_SIZE,
+  COLORS,
+  ICON_SIZE,
+  ICON_STROKE_WIDTH,
+  PILL_HEIGHT,
+  SEARCH_ACTIVE_HEIGHT,
+  SEARCH_ACTIVE_RADIUS,
+  SEARCH_BAR_RADIUS,
+  SEARCH_BUTTON_SIZE,
+  TAB_BAR_GAP,
+  liquidGlassTransform,
+} from "./constants";
+import GlassMaterial from "./GlassMaterial";
+
+// --- Shared Glow Overlay ---
+
+interface GlowOverlayProps {
+  size: number;
+  id: string;
+  touchX: SharedValue<number>;
+  touchY: SharedValue<number>;
+  glowProgress: SharedValue<number>;
+}
+
+export function GlowOverlay({ size, id, touchX, touchY, glowProgress }: GlowOverlayProps) {
+  const half = size / 2;
+
+  const glowStyle = useAnimatedStyle(() => {
+    const progress = glowProgress.get();
+    const opacity = progress <= 1
+      ? progress * 0.2
+      : interpolate(progress, [1, 2], [0.2, 0], "clamp");
+    const scale = progress <= 1
+      ? 1
+      : interpolate(progress, [1, 2], [1, 4], "clamp");
+
+    return {
+      opacity,
+      transform: [
+        { translateX: touchX.get() - half },
+        { translateY: touchY.get() - half },
+        { scale },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View
+      style={[{ position: "absolute", top: 0, left: 0, width: size, height: size }, glowStyle]}
+      pointerEvents="none"
+    >
+      <Svg width={size} height={size}>
+        <Defs>
+          <RadialGradient id={id} cx="50%" cy="50%" r="50%">
+            <Stop offset="0%" stopColor="#fff" stopOpacity={1} />
+            <Stop offset="100%" stopColor="#fff" stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect width={size} height={size} fill={`url(#${id})`} />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// --- Search Button ---
+
+const SEARCH_HALF_W = SEARCH_BUTTON_SIZE / 2;
+const SEARCH_HALF_H = PILL_HEIGHT / 2;
+
+interface SearchButtonProps {
+  searchProgress: SharedValue<number>;
+  isSearchActive: boolean;
+  pressed: SharedValue<number>;
+  overflowX: SharedValue<number>;
+  overflowY: SharedValue<number>;
+  touchX: SharedValue<number>;
+  touchY: SharedValue<number>;
+  glowProgress: SharedValue<number>;
+  composedGesture: ComposedGesture;
+}
+
+export function SearchButton({
+  searchProgress,
+  isSearchActive,
+  pressed,
+  overflowX,
+  overflowY,
+  touchX,
+  touchY,
+  glowProgress,
+  composedGesture,
+}: SearchButtonProps) {
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (isSearchActive) {
+      inputRef.current?.focus();
+    }
+  }, [isSearchActive]);
+
+  const searchHeight = useDerivedValue(() =>
+    interpolate(searchProgress.get(), [0, 1], [PILL_HEIGHT, SEARCH_ACTIVE_HEIGHT], "clamp")
+  );
+  const searchRadius = useDerivedValue(() =>
+    interpolate(searchProgress.get(), [0, 1], [SEARCH_BAR_RADIUS, SEARCH_ACTIVE_RADIUS], "clamp")
+  );
+
+  const glassStyle = useAnimatedStyle(() =>
+    liquidGlassTransform(pressed.get(), overflowX.get(), overflowY.get(), SEARCH_HALF_W, SEARCH_HALF_H)
+  );
+
+  const heightStyle = useAnimatedStyle(() => ({
+    height: searchHeight.get(),
+    borderRadius: searchRadius.get(),
+  }));
+
+  const inputOpacity = useAnimatedStyle(() => ({
+    opacity: interpolate(searchProgress.get(), [0.4, 0.8], [0, 1]),
+  }));
+
+  const iconStyle = useAnimatedStyle(() => ({
+    position: "absolute" as const,
+    top: (searchHeight.get() - ICON_SIZE) / 2,
+    left: interpolate(
+      searchProgress.get(),
+      [0, 1],
+      [(SEARCH_BUTTON_SIZE - ICON_SIZE) / 2, 16],
+    ),
+  }));
+
+  return (
+    <Animated.View style={searchStyles.searchWrapper}>
+      <GestureDetector gesture={composedGesture}>
+        <Animated.View style={glassStyle}>
+          <Animated.View style={[searchStyles.searchClip, heightStyle]}>
+            <GlassMaterial
+              borderRadius={SEARCH_BAR_RADIUS}
+              style={[searchStyles.container, heightStyle]}
+            >
+              <Animated.View style={iconStyle}>
+                <Search
+                  size={ICON_SIZE}
+                  color={COLORS.iconActive}
+                  strokeWidth={ICON_STROKE_WIDTH}
+                />
+              </Animated.View>
+              <Animated.View style={[searchStyles.inputContainer, inputOpacity]}>
+                <TextInput
+                  ref={inputRef}
+                  style={searchStyles.input}
+                  placeholder="Search Workspace"
+                  placeholderTextColor={COLORS.textSecondary}
+                  selectionColor={COLORS.accentBlue}
+                  returnKeyType="search"
+                  pointerEvents={isSearchActive ? "auto" : "none"}
+                />
+              </Animated.View>
+            </GlassMaterial>
+            <GlowOverlay
+              size={120}
+              id="searchGlow"
+              touchX={touchX}
+              touchY={touchY}
+              glowProgress={glowProgress}
+            />
+          </Animated.View>
+        </Animated.View>
+      </GestureDetector>
+    </Animated.View>
+  );
+}
+
+const searchStyles = StyleSheet.create({
+  searchClip: {
+    overflow: "hidden",
+  },
+  container: {
+    justifyContent: "center",
+  },
+  inputContainer: {
+    marginLeft: 44,
+    marginRight: 16,
+    flex: 1,
+  },
+  input: {
+    color: COLORS.textPrimary,
+    fontSize: 16,
+    height: "100%",
+  },
+  searchWrapper: {
+    flex: 1,
+  },
+});
+
+// --- Close Search Button ---
+
+const CLOSE_HALF_W = CLOSE_BUTTON_SIZE / 2;
+const CLOSE_HALF_H = PILL_HEIGHT / 2;
+
+interface CloseSearchButtonProps {
+  searchProgress: SharedValue<number>;
+  pressed: SharedValue<number>;
+  overflowX: SharedValue<number>;
+  overflowY: SharedValue<number>;
+  touchX: SharedValue<number>;
+  touchY: SharedValue<number>;
+  glowProgress: SharedValue<number>;
+  composedGesture: ComposedGesture;
+}
+
+export function CloseSearchButton({
+  searchProgress,
+  pressed,
+  overflowX,
+  overflowY,
+  touchX,
+  touchY,
+  glowProgress,
+  composedGesture,
+}: CloseSearchButtonProps) {
+  const closeHeight = useDerivedValue(() =>
+    interpolate(searchProgress.get(), [0, 1], [PILL_HEIGHT, SEARCH_ACTIVE_HEIGHT], "clamp")
+  );
+
+  const glassStyle = useAnimatedStyle(() =>
+    liquidGlassTransform(pressed.get(), overflowX.get(), overflowY.get(), CLOSE_HALF_W, CLOSE_HALF_H)
+  );
+
+  const visibilityStyle = useAnimatedStyle(() => {
+    const progress = searchProgress.get();
+    return {
+      opacity: interpolate(progress, [0.3, 0.6], [0, 1], "clamp"),
+      width: interpolate(progress, [0, 0.5], [0, SEARCH_ACTIVE_HEIGHT], "clamp"),
+      marginLeft: interpolate(progress, [0, 0.5], [0, TAB_BAR_GAP], "clamp"),
+      transform: [
+        { translateX: interpolate(progress, [0.3, 0.8], [20, 0], "clamp") },
+        { scale: interpolate(progress, [0.3, 0.8], [0.5, 1], "clamp") },
+      ],
+    };
+  });
+
+  const heightStyle = useAnimatedStyle(() => {
+    const h = closeHeight.get();
+    return {
+      height: h,
+      width: h,
+      borderRadius: h / 2,
+    };
+  });
+
+  return (
+    <Animated.View style={visibilityStyle}>
+      <GestureDetector gesture={composedGesture}>
+        <Animated.View style={glassStyle}>
+          <Animated.View style={[closeStyles.buttonClip, heightStyle]}>
+            <GlassMaterial
+              borderRadius={SEARCH_BAR_RADIUS}
+              style={[closeStyles.container, heightStyle]}
+            >
+              <View style={closeStyles.iconCenter}>
+                <X
+                  size={ICON_SIZE}
+                  color={COLORS.iconActive}
+                  strokeWidth={ICON_STROKE_WIDTH}
+                />
+              </View>
+            </GlassMaterial>
+            <GlowOverlay
+              size={120}
+              id="closeGlow"
+              touchX={touchX}
+              touchY={touchY}
+              glowProgress={glowProgress}
+            />
+          </Animated.View>
+        </Animated.View>
+      </GestureDetector>
+    </Animated.View>
+  );
+}
+
+const closeStyles = StyleSheet.create({
+  buttonClip: {
+    overflow: "hidden",
+  },
+  container: {},
+  iconCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+```
+
+</CodePreviewer>
+
+## Common Pitfalls
+
+- **Use `Gesture.Simultaneous()` for long press + pan on the pill.** The long press handles touch-down state while the pan tracks drag movement. Using `Gesture.Race()` would kill the pan when the long press resolves.
+
+- **Use `Gesture.Race()` for the search button's tap + pan.** Here you want tap OR pan — not both. The tap handles toggle, the pan handles the stretch effect.
+
+- **Guard menu/search mutual exclusion.** `toggleMenu` checks `searchProgress > 0.5` and vice versa. Without this, both modes can activate simultaneously.
+
+- **The liquid glass stretch uses damped overflow, not raw delta.** `dampedX = sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))` gives a natural rubber-band feel that asymptotically approaches MAX_PULL.
+
+- **The pill-to-menu morph uses a non-linear scaleX curve.** It dips to 0.7 at 15% progress, recovers to 0.85 at 50%, and reaches 1.0 at 85%. This creates the characteristic "squeeze then expand" feel.
+
+- **Menu items stagger in at 40ms intervals, out at 10ms.** The asymmetry makes the close feel snappier. Items stagger top-to-bottom on open and bottom-to-top on close.
+
+- **Use `scheduleOnRN` from `react-native-worklets`** instead of `runOnJS` for all JS callbacks from gesture handlers and worklets.
+
+- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
+
+- **`GlassMaterial` accepts both static and animated `borderRadius`.** It detects shared values via duck-typing (`typeof borderRadius === 'object' && 'get' in borderRadius`) and switches between static styles and `useAnimatedStyle` accordingly.
+
+- **The glow overlay uses a two-phase progress.** Phase 1 (0→1): glow appears at touch point. Phase 2 (1→2): glow fades out while scaling up 4x, creating a ripple effect on release.
+
+- **Keyboard animation uses `react-native-keyboard-controller`.** The entire tab bar translates up with the keyboard via `useReanimatedKeyboardAnimation`, keeping it accessible during search input.
