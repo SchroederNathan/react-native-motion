@@ -1,86 +1,81 @@
-# Linear Tab Bar — Agent Instructions
+# Linear Tab Bar - Implementation Brief
 
-You are implementing the Linear Tab Bar animation from `react-native-motion`. This is a multi-part animation: a glassmorphic pill tab bar with pill-to-menu morph, liquid glass stretch, touch-tracking glow, search mode transitions, and staggered menu reveals.
+Use this to rebuild the animation in an app codebase. Keep the implementation split across the same pieces the demo uses:
 
-## Animation Specification
+- `constants.ts`
+- `TabBar.tsx`
+- `TabBarPill.tsx`
+- `TabIcon.tsx`
+- `GlassMaterial.tsx`
+- `MenuPanel.tsx`
+- `SearchBar.tsx`
 
-- **Type**: Glassmorphic tab bar with morph, stretch, and search transitions
-- **Libraries**: React Native Reanimated, React Native Gesture Handler, react-native-keyboard-controller, expo-blur, expo-haptics, expo-linear-gradient, react-native-svg, @react-native-masked-view/masked-view, lucide-react-native, react-native-safe-area-context, react-native-worklets
-- **Pill-to-menu morph**: Spring-based with scaleX squeeze curve (dips to 0.7 at 15%, recovers to 1.0 at 85%)
-- **Liquid glass stretch**: Damped elastic deformation with directional stretch and cross-axis compression
-- **Glow overlay**: SVG radial gradient following touch, two-phase fade (appear → ripple out)
-- **Menu stagger**: 40ms in / 10ms out per item, 250ms / 80ms durations
-- **API conventions**: Use `.get()`/`.set()` on shared values (not `.value`) for React Compiler compatibility. Use `scheduleOnRN` from `react-native-worklets` instead of `runOnJS`.
-
-## Types and Constants
+## Required packages
 
 ```tsx
-import Animated, {
-  cancelAnimation,
-  interpolate,
-  useAnimatedStyle,
-  useAnimatedReaction,
-  useDerivedValue,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  withDelay,
-  type SharedValue,
-  type AnimatedStyle,
-} from 'react-native-reanimated'
-import { Gesture, GestureDetector, type ComposedGesture } from 'react-native-gesture-handler'
-import { scheduleOnRN } from 'react-native-worklets'
-import * as Haptics from 'expo-haptics'
-import { BlurView } from 'expo-blur'
-import { LinearGradient } from 'expo-linear-gradient'
-import MaskedView from '@react-native-masked-view/masked-view'
-import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg'
-
-// Layout
-const SCREEN_WIDTH = Dimensions.get('window').width
-const TAB_BAR_HORIZONTAL_PADDING = 16
-const TAB_BAR_GAP = 12
-const PILL_HEIGHT = 52
-const PILL_BORDER_RADIUS = PILL_HEIGHT / 2
-const SEARCH_BUTTON_SIZE = 52
-const TOTAL_WIDTH = SCREEN_WIDTH - 2 * TAB_BAR_HORIZONTAL_PADDING
-const PILL_WIDTH = TOTAL_WIDTH - TAB_BAR_GAP - SEARCH_BUTTON_SIZE
-const MENU_HEIGHT = 420
-const MENU_BORDER_RADIUS = 38
-const MENU_ITEM_HEIGHT = 48
-const ICON_SIZE = 22
-const ICON_STROKE_WIDTH = 3
-const ICON_PADDING = 4
-const CIRCLE_SIZE = PILL_HEIGHT - 8
-
-// Tab zones
-const MAX_SWITCHABLE_TAB = 2
-const TABS_START = ICON_PADDING
-const TABS_END = PILL_WIDTH - ICON_PADDING - CIRCLE_SIZE
-const TAB_ZONE_WIDTH = (TABS_END - TABS_START) / 3
-const MENU_DRAG_THRESHOLD = -50
-
-// Spring configs
-const SPRING = { damping: 24, stiffness: 170, mass: 1 }
-const SPRING_BOUNCY = { damping: 22, stiffness: 250, mass: 0.6 }
-const SPRING_MENU_OPEN = { damping: 14, stiffness: 170, mass: 0.7 }
-const SPRING_MENU_CLOSE = { damping: 22, stiffness: 120, mass: 0.9 }
+react-native-reanimated
+react-native-gesture-handler
+react-native-keyboard-controller
+expo-blur
+expo-haptics
+expo-linear-gradient
+react-native-svg
+@react-native-masked-view/masked-view
+lucide-react-native
+react-native-safe-area-context
+react-native-worklets
 ```
 
-## Implementation Steps
+## Core constants and liquid stretch
 
-### Step 1: constants.ts — Layout, theme, springs, and liquid glass transform
-
-Define all layout constants, color theme, spring configs, and the `liquidGlassTransform` worklet function.
-
-The liquid glass transform:
-1. Applies a subtle press scale (1.0 → 1.02)
-2. Computes damped overflow: `sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))`
-3. Stretches along the drag axis proportional to damped overflow
-4. Compresses along the cross axis (Poisson-ratio-like effect)
-5. Returns a transform array with translateX/Y and scaleX/Y
+These values drive the layout and the glass deformation. Keep the same proportions or the animation will feel off.
 
 ```tsx
+import { Dimensions } from 'react-native'
+import { interpolate } from 'react-native-reanimated'
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window')
+
+export const TAB_BAR_HORIZONTAL_PADDING = 16
+export const TAB_BAR_GAP = 12
+
+export const PILL_HEIGHT = 52
+export const SEARCH_ACTIVE_HEIGHT = 42
+export const PILL_BORDER_RADIUS = PILL_HEIGHT / 2
+export const SEARCH_ACTIVE_RADIUS = SEARCH_ACTIVE_HEIGHT / 2
+
+export const SEARCH_BUTTON_SIZE = 52
+export const TOTAL_WIDTH = SCREEN_WIDTH - 2 * TAB_BAR_HORIZONTAL_PADDING
+export const PILL_WIDTH = TOTAL_WIDTH - TAB_BAR_GAP - SEARCH_BUTTON_SIZE
+
+export const MENU_HEIGHT = 420
+export const MENU_BORDER_RADIUS = 38
+export const MENU_ITEM_HEIGHT = 48
+export const MENU_DRAG_THRESHOLD = -50
+
+export const ICON_PADDING = 4
+export const CIRCLE_SIZE = PILL_HEIGHT - 8
+export const MAX_SWITCHABLE_TAB = 2
+export const TABS_START = ICON_PADDING
+export const TABS_END = PILL_WIDTH - ICON_PADDING - CIRCLE_SIZE
+export const TAB_ZONE_WIDTH = (TABS_END - TABS_START) / 3
+
+export const TAB_CENTER_XS = [
+  TABS_START + TAB_ZONE_WIDTH * 0.5,
+  TABS_START + TAB_ZONE_WIDTH * 1.5,
+  TABS_START + TAB_ZONE_WIDTH * 2.5,
+  PILL_WIDTH - ICON_PADDING - CIRCLE_SIZE / 2,
+] as const
+
+export const SPRING = { damping: 24, stiffness: 170, mass: 1 } as const
+export const SPRING_BOUNCY = { damping: 22, stiffness: 250, mass: 0.6 } as const
+export const SPRING_MENU_OPEN = { damping: 14, stiffness: 170, mass: 0.7 } as const
+export const SPRING_MENU_CLOSE = { damping: 22, stiffness: 120, mass: 0.9 } as const
+
+const MAX_PULL = 60
+const MAX_STRETCH = 0.1
+const MAX_COMPRESS = 0.12
+
 export function liquidGlassTransform(
   pressed: number,
   overflowX: number,
@@ -88,15 +83,21 @@ export function liquidGlassTransform(
   halfW: number,
   halfH: number,
 ) {
-  "worklet";
-  const pressScale = interpolate(pressed, [0, 1], [1, 1.02]);
-  // Damped rubber-band for each axis
-  const signX = overflowX < 0 ? -1 : 1;
-  const dampedX = signX * MAX_PULL * (1 - 1 / (Math.abs(overflowX) / MAX_PULL + 1));
-  // ... same for Y
-  // Stretch along drag, compress cross-axis
-  const stretchX = interpolate(|dampedX|, [0, MAX_PULL], [0, 0.1], "clamp");
-  const compressX = interpolate(|dampedY|, [0, MAX_PULL], [0, 0.12], "clamp");
+  'worklet'
+
+  const pressScale = interpolate(pressed, [0, 1], [1, 1.02])
+
+  const signX = overflowX < 0 ? -1 : 1
+  const dampedX = signX * MAX_PULL * (1 - 1 / (Math.abs(overflowX) / MAX_PULL + 1))
+  const signY = overflowY < 0 ? -1 : 1
+  const dampedY = signY * MAX_PULL * (1 - 1 / (Math.abs(overflowY) / MAX_PULL + 1))
+
+  const stretchX = interpolate(Math.abs(dampedX), [0, MAX_PULL], [0, MAX_STRETCH], 'clamp')
+  const stretchY = interpolate(Math.abs(dampedY), [0, MAX_PULL], [0, MAX_STRETCH], 'clamp')
+
+  const compressX = interpolate(Math.abs(dampedY), [0, MAX_PULL], [0, MAX_COMPRESS], 'clamp')
+  const compressY = interpolate(Math.abs(dampedX), [0, MAX_PULL], [0, MAX_COMPRESS], 'clamp')
+
   return {
     transform: [
       { translateX: signX * halfW * stretchX },
@@ -104,114 +105,316 @@ export function liquidGlassTransform(
       { scaleX: pressScale * (1 + stretchX) * (1 - compressX) },
       { scaleY: pressScale * (1 + stretchY) * (1 - compressY) },
     ],
-  };
+  }
 }
 ```
 
-### Step 2: GlassMaterial.tsx — Frosted glass component
+## Main state and pill morph
 
-A reusable glass material component with:
-1. `BlurView` (tint: "dark", intensity: 40) as the base
-2. `LinearGradient` overlay (top: 11% white → bottom: 5% white)
-3. `MaskedView` with a 1px border ring mask, filled with a gradient (bright top → dim middle → medium bottom)
-4. Children rendered absolutely on top
+`TabBar.tsx` owns two modes: search and menu. They are mutually exclusive.
 
-Supports both static `borderRadius` (number) and animated `borderRadius` (SharedValue<number>). Detects via duck-typing: `typeof borderRadius === 'object' && 'get' in borderRadius`.
+```tsx
+function useTabBarAnimation() {
+  const searchProgress = useSharedValue(0)
+  const menuProgress = useSharedValue(0)
+  const [activeTab, setActiveTab] = useState(0)
+  const [isSearchActive, setIsSearchActive] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-### Step 3: GlowOverlay — Touch-tracking radial glow (in SearchBar.tsx)
+  const toggleSearch = useCallback(() => {
+    if (menuProgress.get() > 0.5) return
+    const opening = searchProgress.get() < 0.5
+    if (!opening) Keyboard.dismiss()
+    searchProgress.set(withSpring(opening ? 1 : 0, SPRING))
+    setIsSearchActive(opening)
+  }, [menuProgress, searchProgress])
 
-An SVG-based radial gradient that follows the touch point:
-- Rendered as a fixed-size square (e.g., 200px for pill, 120px for search)
-- Positioned via translateX/Y from touchX/touchY shared values
-- Two-phase glowProgress:
-  - Phase 1 (0→1): Appears instantly at 20% opacity
-  - Phase 2 (1→2): Fades to 0 while scaling up 4x (ripple effect)
+  const toggleMenu = useCallback(() => {
+    if (searchProgress.get() > 0.5) return
+    const opening = menuProgress.get() < 0.5
+    cancelAnimation(menuProgress)
+    menuProgress.set(
+      withSpring(opening ? 1 : 0, opening ? SPRING_MENU_OPEN : SPRING_MENU_CLOSE)
+    )
+    setIsMenuOpen(opening)
+  }, [menuProgress, searchProgress])
 
-### Step 4: TabIcon.tsx — Individual tab icon with hover/active states
+  const pillAnimatedStyle = useAnimatedStyle(() => {
+    const sp = searchProgress.get()
+    const mp = menuProgress.get()
 
-Each icon has:
-- A `Gesture.Tap()` that sets touch position, triggers press scale, glow, and haptics
-- Active background (shown when `isActive` and no tab is hovered)
-- Hover background (shown when `hoveredTab === index`)
-- Menu collapse animation: all icons translate toward pill center and scale to 0.3 during menu open
-- Search collapse: non-first icons fade/scale to 0 and their flex shrinks to 0
+    if (mp > 0.01) {
+      return {
+        width: PILL_WIDTH,
+        height: interpolate(mp, [0, 0.1, 1], [PILL_HEIGHT, PILL_HEIGHT, MENU_HEIGHT]),
+        opacity: 1,
+        marginRight: TAB_BAR_GAP,
+        borderRadius: interpolate(mp, [0, 0.8], [PILL_BORDER_RADIUS, MENU_BORDER_RADIUS], 'clamp'),
+        transform: [
+          {
+            scaleX: interpolate(mp, [0, 0.15, 0.5, 0.85], [1, 0.7, 0.85, 1], 'clamp'),
+          },
+        ],
+      }
+    }
 
-The 4th icon (index 3, ChevronsUpDown) is circular instead of flex-filling.
+    return {
+      width: interpolate(sp, [0, 0.6], [PILL_WIDTH, 0], 'clamp'),
+      height: PILL_HEIGHT,
+      opacity: interpolate(sp, [0, 0.3], [1, 0], 'clamp'),
+      marginRight: interpolate(sp, [0, 0.6], [TAB_BAR_GAP, 0], 'clamp'),
+      borderRadius: PILL_BORDER_RADIUS,
+      transform: [
+        { translateX: interpolate(sp, [0, 0.6], [0, -PILL_WIDTH * 0.3], 'clamp') },
+      ],
+    }
+  })
 
-### Step 5: TabBarPill.tsx — Glass pill container
+  return {
+    searchProgress,
+    menuProgress,
+    activeTab,
+    setActiveTab,
+    isSearchActive,
+    isMenuOpen,
+    toggleSearch,
+    toggleMenu,
+    pillAnimatedStyle,
+  }
+}
+```
 
-Wraps the icons row and menu panel inside `GlassMaterial`:
-- Outer `GestureDetector` with the composed pan gesture
-- `liquidGlassTransform` applied as outer animated style (disabled when menu is open)
-- `pillAnimatedStyle` controls width/height/borderRadius/scaleX for the morph
-- `GlowOverlay` rendered inside the pill for touch-tracking glow
+## Pill gestures
 
-### Step 6: SearchBar.tsx — Search button, close button
+The pill uses `Gesture.Simultaneous(longPress, pan)`. Long press is only there to capture touch-down state immediately. The pan owns drag, hover, tab switching, and drag-to-open-menu.
 
-**SearchButton**: Starts as a 52px circle, expands to full-width search bar on toggle.
-- Height animates from 52 → 42 (more compact in search mode)
-- Search icon slides from centered to left-aligned
-- TextInput fades in at 40-80% of search progress
-- Auto-focuses when search activates
+```tsx
+function detectAnyTab(x: number) {
+  'worklet'
+  if (x >= TABS_START && x < TABS_END) {
+    return Math.min(MAX_SWITCHABLE_TAB, Math.floor((x - TABS_START) / TAB_ZONE_WIDTH))
+  }
+  if (x >= TABS_END && x <= PILL_WIDTH) return 3
+  return -1
+}
 
-**CloseSearchButton**: Slides in from right during search mode.
-- Width animates from 0 → 42, marginLeft from 0 → 12
-- Scale + translateX entrance animation
-- Same glass material and glow overlay treatment
+const pendingTab = useSharedValue(-1)
 
-Both buttons use `Gesture.Race(pan, tap)` — pan for stretch effect, tap for toggle.
+const panGesture = Gesture.Simultaneous(
+  Gesture.LongPress()
+    .minDuration(0)
+    .onStart((e) => {
+      cancelAnimation(overflowX)
+      cancelAnimation(overflowY)
+      cancelAnimation(glowProgress)
+      touchX.set(e.x)
+      touchY.set(e.y)
+      pillPressed.set(withTiming(1, { duration: 80 }))
+      glowProgress.set(1)
+      if (searchProgress.get() < 0.5) hoveredTab.set(detectAnyTab(e.x))
+    }),
+  Gesture.Pan()
+    .minDistance(10)
+    .onStart((e) => {
+      cancelAnimation(overflowX)
+      cancelAnimation(overflowY)
+      cancelAnimation(glowProgress)
+      touchX.set(e.x)
+      touchY.set(e.y)
+      pillPressed.set(withTiming(1, { duration: 80 }))
+      glowProgress.set(1)
+    })
+    .onUpdate((e) => {
+      touchX.set(e.x)
+      touchY.set(e.y)
 
-### Step 7: MenuPanel.tsx — Staggered menu items
+      const ovX = e.x < 0 ? e.x : e.x > PILL_WIDTH ? e.x - PILL_WIDTH : 0
+      const ovY = e.y < 0 ? e.y : e.y > PILL_HEIGHT ? e.y - PILL_HEIGHT : 0
 
-The menu content renders absolutely inside the pill (visible when pill morphs to menu height):
-- Header with username + chevron + settings icon
-- Divider
-- 7 menu items (Inbox, My Issues, Favorites, Projects, Views, Teams, Settings)
+      overflowX.set(ovX)
+      overflowY.set(ovY)
 
-Uses `useAnimatedReaction` watching `menuProgress`:
-- On open (progress > 0.1, going up): Stagger all elements in top-to-bottom with 40ms delays
-- On close (progress < 0.95, going down): Stagger out bottom-to-top with 10ms delays
-- Each item animates opacity (0→1) and translateY (-10→0)
+      if (searchProgress.get() >= 0.5) return
 
-### Step 8: TabBar.tsx — Main component with hooks
+      if (ovY < MENU_DRAG_THRESHOLD && !menuTriggeredByDrag.get() && menuProgress.get() < 0.5) {
+        menuTriggeredByDrag.set(true)
+        hoveredTab.set(-1)
+        scheduleOnRN(toggleMenu)
+        scheduleOnRN(triggerHaptic)
+        overflowX.set(withSpring(0, SPRING_BOUNCY))
+        overflowY.set(withSpring(0, SPRING_BOUNCY))
+        pillPressed.set(withTiming(0, { duration: 150 }))
+        return
+      }
 
-Three custom hooks:
-1. **useTabBarAnimation**: Manages searchProgress, menuProgress, activeTab state, and the pill animated style (morph logic)
-2. **usePillGestures**: Composes `Gesture.Simultaneous(LongPress, Pan)` for the pill. Handles tab detection, overflow tracking, drag-to-menu trigger, and tab selection on release
-3. **useSearchGestures**: Composes `Gesture.Race(Pan, Tap)` for search/close buttons
+      if (menuTriggeredByDrag.get()) return
 
-The main component:
-- Uses `useSafeAreaInsets` for bottom padding
-- Uses `useReanimatedKeyboardAnimation` for keyboard-aware positioning
-- Renders the pill, search button, and close button in a row
-- Adds an `absoluteFill` Pressable backdrop when menu is open for dismiss
+      if (ovX === 0 && ovY === 0) {
+        const nextTab = detectAnyTab(e.x)
+        if (nextTab !== hoveredTab.get()) {
+          hoveredTab.set(nextTab)
+          scheduleOnRN(triggerHaptic)
+        }
+      } else if (hoveredTab.get() !== -1) {
+        hoveredTab.set(-1)
+      }
+    })
+    .onEnd(() => {
+      const wasDragMenu = menuTriggeredByDrag.get()
+      menuTriggeredByDrag.set(false)
 
-## Key Code Patterns
+      const commitTab = hoveredTab.get()
+      pillPressed.set(withTiming(0, { duration: 150 }))
+      glowProgress.set(withTiming(2, { duration: 300 }))
+      overflowX.set(withSpring(0, SPRING_BOUNCY))
+      overflowY.set(withSpring(0, SPRING_BOUNCY))
 
-### Pill-to-menu morph curve
-The scaleX during morph isn't linear — it follows `[0, 0.15, 0.5, 0.85] → [1, 0.7, 0.85, 1]`. This creates a distinctive squeeze-then-expand that gives the morph physicality.
+      if (wasDragMenu || searchProgress.get() >= 0.5) {
+        hoveredTab.set(-1)
+        return
+      }
 
-### Mutual exclusion between modes
-Search and menu modes are mutually exclusive. Both toggle functions check the other's progress before proceeding. This prevents visual conflicts.
+      if (commitTab >= 0 && commitTab <= 2) {
+        pendingTab.set(commitTab)
+        scheduleOnRN(applyPendingTab)
+        scheduleOnRN(triggerHaptic)
+      } else {
+        hoveredTab.set(-1)
+        if (commitTab === 3) {
+          scheduleOnRN(toggleMenu)
+          scheduleOnRN(triggerHaptic)
+        }
+      }
+    })
+)
+```
 
-### Drag-to-open menu
-When panning upward past -50px threshold on the pill, the menu opens. This is tracked with `menuTriggeredByDrag` to prevent tab selection on the same gesture's end.
+`applyPendingTab` should read `pendingTab.get()`, call `setActiveTab`, then reset it to `-1`.
 
-### Pending tab pattern
-Tab selection from pan gestures uses a `pendingTab` shared value + `scheduleOnRN(applyPendingTab)` to bridge from the worklet to React state safely.
+## Glass surface
 
-### Glow two-phase pattern
-The glow overlay tracks a progress from 0→1→2. 0→1 is instant (finger down), 1→2 is animated over 300ms (finger up ripple). The style splits on `progress <= 1` to handle both phases.
+`GlassMaterial.tsx` is reused by the pill, search button, and close button.
 
-## Common Pitfalls
+- `BlurView` with `tint="dark"` and `intensity={40}`
+- `LinearGradient` fill on top of the blur
+- `MaskedView` for a 1px gradient border ring
+- support `borderRadius` as either a number or `SharedValue<number>`
 
-- **Use `Gesture.Simultaneous()` for long press + pan on the pill.** The long press detects touch-down, the pan tracks movement. `Gesture.Race()` would kill one of them.
-- **Use `Gesture.Race()` for search button tap + pan.** Here you want one or the other, not both.
-- **Guard menu/search mutual exclusion.** Always check the other mode's progress before toggling.
-- **The liquid glass stretch uses damped overflow.** Raw overflow values would feel jarring — the damping formula creates natural rubber-band physics.
-- **Menu stagger is asymmetric.** 40ms in, 10ms out. This makes closing feel snappier than opening.
-- **GlassMaterial border radius duck-typing.** Check `'get' in borderRadius` to determine if it's a shared value. This avoids TypeScript generics overhead.
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of `runOnJS` for all JS callbacks from gesture handlers.
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
-- **Cancel running animations before starting new ones.** Call `cancelAnimation()` on shared values before setting new targets, especially for the glow and overflow springs.
-- **The keyboard animation uses `useReanimatedKeyboardAnimation`** from `react-native-keyboard-controller`, not the built-in Reanimated keyboard hook.
+Duck-type the animated case like this:
+
+```tsx
+const isAnimated = typeof borderRadius === 'object' && 'get' in borderRadius
+```
+
+## Tab icons
+
+Each tab icon owns its tap gesture. That gesture only sets touch state and delegates the actual selection.
+
+- On `onBegin`: set `touchX`, `touchY`, `pillPressed`, and `glowProgress`
+- On `onFinalize`: reset the press state, animate glow `1 -> 2`, clear hover, then `scheduleOnRN(triggerHaptic)` and `scheduleOnRN(handlePress)`
+- When `menuProgress > 0`, every icon translates toward the pill center and scales down
+- When `searchProgress > 0`, tabs `1..3` fade out and collapse; tab `0` stays visible
+- Tab `3` is circular and uses its own pressed state to keep its hover background visible
+
+## Menu panel
+
+`MenuPanel.tsx` should animate the header, divider, and seven items with separate progress values.
+
+```tsx
+const STAGGER_IN_MS = 40
+const STAGGER_OUT_MS = 10
+const ITEM_IN_DURATION = 250
+const ITEM_OUT_DURATION = 80
+
+useAnimatedReaction(
+  () => menuProgress.get(),
+  (current, previous) => {
+    const prev = previous ?? 0
+    const goingUp = current > prev
+
+    if (goingUp && current > 0.1 && !wasOpen.get()) {
+      wasOpen.set(true)
+      headerProgress.set(withDelay(0, withTiming(1, { duration: ITEM_IN_DURATION })))
+      dividerProgress.set(withDelay(40, withTiming(1, { duration: ITEM_IN_DURATION })))
+      // itemProgresses[0..6] with 40ms stagger
+    } else if (!goingUp && current < 0.95 && wasOpen.get()) {
+      wasOpen.set(false)
+      // reverse the item order with 10ms stagger
+    }
+  }
+)
+```
+
+Each item animates `opacity` and `translateY` from `-10` to `0`.
+
+## Search and close buttons
+
+Both buttons use `Gesture.Race(pan, tap)`.
+
+- `tap`: handles toggle + haptic
+- `pan`: only exists for the liquid stretch and glow
+
+Shared glow component:
+
+```tsx
+export function GlowOverlay({ size, id, touchX, touchY, glowProgress }) {
+  const half = size / 2
+
+  const glowStyle = useAnimatedStyle(() => {
+    const progress = glowProgress.get()
+    const opacity = progress <= 1
+      ? progress * 0.2
+      : interpolate(progress, [1, 2], [0.2, 0], 'clamp')
+    const scale = progress <= 1
+      ? 1
+      : interpolate(progress, [1, 2], [1, 4], 'clamp')
+
+    return {
+      opacity,
+      transform: [
+        { translateX: touchX.get() - half },
+        { translateY: touchY.get() - half },
+        { scale },
+      ],
+    }
+  })
+
+  return <Animated.View style={glowStyle}>{/* radial SVG */}</Animated.View>
+}
+```
+
+`SearchButton` specifics:
+
+- outer size starts at `52`
+- height animates from `52` to `42`
+- icon moves from centered to `left: 16`
+- input opacity fades in over `searchProgress` `[0.4, 0.8]`
+- focus the `TextInput` from `useEffect` when `isSearchActive` becomes true
+
+`CloseSearchButton` specifics:
+
+- opacity ramps in over `[0.3, 0.6]`
+- width grows from `0` to `42`
+- margin-left grows from `0` to `TAB_BAR_GAP`
+- translateX and scale animate in together
+
+## Final render tree
+
+`TabBar.tsx` should render:
+
+1. An absolutely positioned bottom row using `useSafeAreaInsets()`
+2. `TabBarPill`
+3. `SearchButton`
+4. `CloseSearchButton`
+5. An `absoluteFill` `Pressable` backdrop when the menu is open
+
+Also translate the whole bar with `useReanimatedKeyboardAnimation()` so search stays visible above the keyboard.
+
+## Do not change these behaviors
+
+- Keep search and menu mutually exclusive.
+- Keep the pill squeeze curve `[0, 0.15, 0.5, 0.85] -> [1, 0.7, 0.85, 1]`.
+- Keep the menu drag threshold at `-50`.
+- Use `.get()` / `.set()` on shared values.
+- Use `scheduleOnRN` for JS callbacks from gesture handlers.
+- Cancel running animations before starting new press or glow animations.

@@ -1,65 +1,83 @@
-# Radial Menu — Agent Instructions
+# Radial Menu - Implementation Brief
 
-You are implementing the Radial Menu animation from `react-native-motion`. This is a three-part animation: a long-press gesture system, a radial action menu with proximity-based scaling, and a blur overlay with card cloning.
+This animation is built from three pieces:
 
-## Animation Specification
+- `OverlayProvider.tsx`
+- `useRadialOverlay.ts`
+- `RadialMenu.tsx`
 
-- **Type**: Long-press radial action menu with adaptive positioning
-- **Libraries**: React Native Reanimated, React Native Gesture Handler, expo-blur, expo-haptics, expo-image
-- **Button entrance**: Spring with damping 80 (quick settle, no bounce)
-- **Blur transition**: Timing-based opacity (300ms in, 200ms out)
-- **Proximity scaling**: Continuous 1.0–1.4 based on finger distance
-- **Layout**: Small fixed set of buttons (3–5), all absolutely positioned — no virtualization needed
-- **API conventions**: Use `.get()`/`.set()` on shared values (not `.value`) for React Compiler compatibility. Use `scheduleOnRN` from `react-native-worklets` instead of `runOnJS`.
+The consumer only needs to wrap the target card with the composed gesture and provide a clone renderer.
 
-## Types and Constants
+## Required packages
 
 ```tsx
-import Animated, {
-  useAnimatedStyle,
-  useAnimatedReaction,
-  useDerivedValue,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  useAnimatedProps,
-  runOnJS,
-  SharedValue,
-} from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import * as Haptics from 'expo-haptics'
-import { BlurView } from 'expo-blur'
+react-native-reanimated
+react-native-gesture-handler
+expo-blur
+expo-haptics
+```
 
+## Data shape and constants
+
+```tsx
 type RadialActionDef = { id: string; icon: any; title: string }
 
-const BUTTON_RADIUS = 28          // 56px diameter
-const DEFAULT_RADIUS = 96          // press point to button center
-const DEFAULT_ANGLE_STEP_DEG = 40  // angular spread between buttons
+const BUTTON_RADIUS = 28
+const DEFAULT_RADIUS = 96
+const DEFAULT_ANGLE_STEP_DEG = 40
 const BASE_ICON_SIZE = 22
 ```
 
-## Implementation Steps
+## Overlay provider
 
-### Step 1: OverlayProvider — blur backdrop and content layer
+The overlay owns the blur, dark scrim, and lifted content layer. Keep it mounted at the app root around the screen that uses the menu.
 
-Create a context provider that manages overlay visibility. It controls:
-- `blurIntensity` shared value animated with `withTiming(100, { duration: 300 })` on show, `withTiming(0, { duration: 200 })` on hide
-- `overlayOpacity` shared value for the dark scrim layer
-- `contentScale` animated to 1.1 and `contentRotation` to a random -3 to +3 degrees for the card "lift" effect
-- Use `Animated.createAnimatedComponent(BlurView)` with `useAnimatedProps` to animate blur intensity without re-renders
+```tsx
+const AnimatedBlurView = Animated.createAnimatedComponent(BlurView)
+
+const blurIntensity = useSharedValue(0)
+const overlayOpacity = useSharedValue(0)
+const contentScale = useSharedValue(1)
+const contentRotation = useSharedValue(0)
+
+const showOverlay = useCallback((content: ReactNode) => {
+  setOverlayContent(content)
+  setIsVisible(true)
+  overlayOpacity.set(withTiming(1, { duration: 300 }))
+  blurIntensity.set(withTiming(100, { duration: 300 }))
+  contentScale.set(withTiming(1.1, { duration: 300 }))
+  contentRotation.set(withTiming(Math.random() * 6 - 3, { duration: 300 }))
+}, [])
+
+const hideOverlay = useCallback(() => {
+  overlayOpacity.set(withTiming(0, { duration: 200 }))
+  blurIntensity.set(withTiming(0, { duration: 200 }))
+  contentScale.set(withTiming(1, { duration: 200 }))
+  contentRotation.set(withTiming(0, { duration: 200 }))
+
+  setTimeout(() => {
+    setIsVisible(false)
+    setOverlayContent(null)
+  }, 200)
+}, [])
+```
 
 Render structure:
+
 ```tsx
 <OverlayContext.Provider value={{ showOverlay, hideOverlay }}>
   {children}
   {isVisible && (
     <>
-      {/* Blur: z-index 9998 */}
       <Animated.View style={[StyleSheet.absoluteFillObject, overlayStyle]}>
-        <AnimatedBlurView tint="dark" style={StyleSheet.absoluteFill} animatedProps={blurAnimatedProps} />
+        <AnimatedBlurView
+          tint="dark"
+          style={StyleSheet.absoluteFill}
+          animatedProps={blurAnimatedProps}
+        />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
       </Animated.View>
-      {/* Content: z-index 9999 */}
+
       <Animated.View style={[StyleSheet.absoluteFillObject, contentStyle]}>
         {overlayContent}
       </Animated.View>
@@ -68,13 +86,10 @@ Render structure:
 </OverlayContext.Provider>
 ```
 
-Use `setTimeout(hideDelay, 200)` after starting the hide animation to remove content from the tree.
+## Gesture hook
 
-### Step 2: useRadialOverlay — gesture composition
+`useRadialOverlay.ts` owns the shared values and bridges from the long press into the overlay.
 
-Create a hook that returns `longPressGesture` and `panGesture` for the consumer to compose.
-
-**Shared values:**
 ```tsx
 const cursorX = useSharedValue(0)
 const cursorY = useSharedValue(0)
@@ -83,27 +98,21 @@ const overlayOpen = useSharedValue(0)
 const isLongPressed = useSharedValue(false)
 ```
 
-**Long press gesture:**
-- `Gesture.LongPress().minDuration(500).maxDistance(25)`
-- `onStart`: fire `Haptics.impactAsync(Medium)` via `runOnJS`, set `isLongPressed`, record cursor position, call `openOverlayAt` via `runOnJS`
-- `onFinalize`: reset `isLongPressed`
+Open the overlay by measuring the pressed view on the JS thread and rendering both the clone and the radial menu into the provider.
 
-**Pan gesture:**
-- `Gesture.Pan().maxPointers(1).activateAfterLongPress(500)`
-- `onBegin`/`onUpdate`: set `cursorX`/`cursorY` from `e.absoluteX`/`e.absoluteY`
-- `onEnd`: if `overlayOpen.value === 1`, increment `releaseSignal`
-
-**Opening the overlay:**
 ```tsx
-const openOverlayAt = useCallback((pressX, pressY) => {
+const openOverlayAt = useCallback((pressX: number, pressY: number) => {
   targetRef.current?.measureInWindow((x, y, width, height) => {
     const clone = renderClone({ x, y, width, height })
+
     showOverlay(
       <View style={[StyleSheet.absoluteFill, { zIndex: 10000 }]}>
         {clone}
         <RadialMenu
-          pressX={pressX} pressY={pressY}
-          cursorX={cursorX} cursorY={cursorY}
+          pressX={pressX}
+          pressY={pressY}
+          cursorX={cursorX}
+          cursorY={cursorY}
           releaseSignal={releaseSignal}
           actions={actions}
           onSelect={handleSelect}
@@ -111,53 +120,121 @@ const openOverlayAt = useCallback((pressX, pressY) => {
         />
       </View>
     )
-    overlayOpen.value = 1
+
+    overlayOpen.set(1)
   })
-}, [deps])
+}, [actions, cursorX, cursorY, handleCancel, handleSelect, releaseSignal, renderClone, showOverlay, targetRef])
 ```
 
-Consumer composes gestures: `Gesture.Simultaneous(Gesture.Race(longPress, tap), pan)`
+Use this gesture pair:
 
-### Step 3: RadialMenu — adaptive angle calculation
-
-Compute the base angle from press position so buttons always fan away from the nearest edge:
-
-- If press is in top quarter: buttons fan downward (user-space 180°)
-- If press is in bottom three-quarters: buttons fan upward (user-space 0°)
-- Left/right offset lerps toward diagonal angles based on horizontal distance from center
-- Convert from user-space (0° = up, CCW+) to RN coordinates (0° = right, CW+): `rnAngle = (270 - userAngle + 360) % 360`
-
-Distribute actions around the base angle:
 ```tsx
-const half = (count - 1) / 2
-const angles = Array.from({ length: count }, (_, i) =>
-  baseAngleDeg + (i - half) * angleStepDeg
-)
+const longPressGesture = Gesture.LongPress()
+  .minDuration(500)
+  .maxDistance(25)
+  .onStart((event) => {
+    'worklet'
+    runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium)
+    isLongPressed.set(true)
+    cursorX.set(event.absoluteX)
+    cursorY.set(event.absoluteY)
+    runOnJS(openOverlayAt)(event.absoluteX, event.absoluteY)
+  })
+  .onFinalize(() => {
+    'worklet'
+    isLongPressed.set(false)
+  })
+
+const panGesture = Gesture.Pan()
+  .maxPointers(1)
+  .activateAfterLongPress(500)
+  .onBegin((e) => {
+    'worklet'
+    cursorX.set(e.absoluteX)
+    cursorY.set(e.absoluteY)
+  })
+  .onUpdate((e) => {
+    'worklet'
+    cursorX.set(e.absoluteX)
+    cursorY.set(e.absoluteY)
+  })
+  .onEnd(() => {
+    'worklet'
+    if (overlayOpen.get() === 1) {
+      releaseSignal.set(releaseSignal.get() + 1)
+    }
+  })
 ```
 
-Convert angles to positions:
+Return `longPressGesture`, `panGesture`, `isLongPressed`, and `overlayOpen`.
+
+## Radial layout
+
+The menu chooses a base angle from the press location so buttons fan away from the nearest edge.
+
 ```tsx
-const toXY = (deg) => ({
-  x: pressX + radius * Math.cos(deg * Math.PI / 180),
-  y: pressY + radius * Math.sin(deg * Math.PI / 180),
-})
+function lerpAngle(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+const baseAngleDeg = useMemo(() => {
+  const cx = width / 2
+  const isTopQuarter = pressY < height / 4
+  const isCenterBand = Math.abs(pressX - cx) < width * 0.1
+
+  const centerAngle = isTopQuarter ? 180 : 0
+  const leftFar = isTopQuarter ? 230 : 310
+  const rightFar = isTopQuarter ? 120 : 60
+  const dxNorm = Math.min(1, Math.abs(pressX - cx) / (width / 2))
+
+  let userAngle = centerAngle
+  if (!isCenterBand) {
+    userAngle = pressX < cx
+      ? lerpAngle(centerAngle, leftFar, dxNorm)
+      : lerpAngle(centerAngle, rightFar, dxNorm)
+  }
+
+  return (270 - userAngle + 360) % 360
+}, [height, pressX, pressY, width])
+
+const anglesDeg = useMemo(() => {
+  const half = (actions.length - 1) / 2
+  return Array.from({ length: actions.length }, (_, i) => baseAngleDeg + (i - half) * angleStepDeg)
+}, [actions.length, angleStepDeg, baseAngleDeg])
 ```
 
-### Step 4: Button entrance and proximity animation
+Convert each angle into a button center:
 
-Animate all buttons with a single `animationProgress` shared value: `withSpring(1, { damping: 80 })`.
+```tsx
+const toXY = (deg: number) => {
+  const rad = (deg * Math.PI) / 180
+  return {
+    x: pressX + radius * Math.cos(rad),
+    y: pressY + radius * Math.sin(rad),
+  }
+}
+```
 
-Each button's `useAnimatedStyle`:
+## Button entrance and proximity
 
-1. **Position**: Interpolate from press point to final position using `progress`
-2. **Proximity scale**: Compute distance from cursor to button center. Within `BUTTON_RADIUS * 2`, scale from 1.0 to 1.4
-3. **Combined scale**: `progress * proximity`
-4. **Nudge offset**: Push button along its radial axis proportional to `closeness²` (quadratic ease), max 32px
-5. **Size**: `BUTTON_RADIUS * 2 * combinedScale` for both width and height
+All buttons share one entrance progress:
+
+```tsx
+const animationProgress = useSharedValue(0)
+
+useEffect(() => {
+  if (!hasAnimatedIn.current) {
+    hasAnimatedIn.current = true
+    animationProgress.set(withSpring(1, { damping: 80 }))
+  }
+}, [animationProgress])
+```
+
+Each button animates position, size, and proximity scaling. This animation intentionally uses `left`, `top`, `width`, and `height` because the button count is tiny and the hit target should grow with the visual circle.
 
 ```tsx
 const animatedButtonStyle = useAnimatedStyle(() => {
-  const progress = animationProgress.value
+  const progress = animationProgress.get()
   const startX = pressX - BUTTON_RADIUS
   const startY = pressY - BUTTON_RADIUS
   const endX = button.pos.x - BUTTON_RADIUS
@@ -166,52 +243,93 @@ const animatedButtonStyle = useAnimatedStyle(() => {
   const currentX = startX + (endX - startX) * progress
   const currentY = startY + (endY - startY) * progress
 
-  const cx = cursorX?.value ?? pressX
-  const cy = cursorY?.value ?? pressY
+  const cx = cursorX.get()
+  const cy = cursorY.get()
   const dx = cx - button.pos.x
   const dy = cy - button.pos.y
   const dist = Math.sqrt(dx * dx + dy * dy)
   const normalized = Math.max(0, Math.min(1, 1 - dist / (BUTTON_RADIUS * 2)))
   const proximity = 1 + normalized * 0.4
-  const scale = progress * proximity
-  const opacity = progress
 
-  // Nudge along radial axis
   const vx = endX - startX
   const vy = endY - startY
   const vlen = Math.max(1, Math.sqrt(vx * vx + vy * vy))
   const closeness = Math.max(0, Math.min(1, (proximity - 1) / 0.4))
   const offset = 32 * closeness * closeness * progress
-  const adjX = currentX + (vx / vlen) * offset
-  const adjY = currentY + (vy / vlen) * offset
 
-  const baseSize = BUTTON_RADIUS * 2
+  const size = BUTTON_RADIUS * 2 * progress * proximity
+
   return {
-    left: adjX,
-    top: adjY,
-    opacity,
-    width: baseSize * scale,
-    height: baseSize * scale,
+    position: 'absolute',
+    left: currentX + (vx / vlen) * offset,
+    top: currentY + (vy / vlen) * offset,
+    opacity: progress,
+    width: size,
+    height: size,
+    borderRadius: size,
   }
 })
 ```
 
-### Step 5: Hover detection and haptics
-
-Use `useAnimatedReaction` watching `{ x: cursorX.value, y: cursorY.value }`. Find the nearest button center within `(BUTTON_RADIUS * 3)²` distance. Update `hoveredId` shared value.
-
-Fire `Haptics.selectionAsync()` via `runOnJS` only when entering a new button (guard with `lastHapticId`). Clear `lastHapticId` when leaving all buttons.
-
-### Step 6: Release signal reaction
+The icon size follows proximity. In the demo this is bridged into React state:
 
 ```tsx
 useAnimatedReaction(
-  () => releaseSignal ? releaseSignal.value : -1,
-  (val, prev) => {
-    if (val === -1 || prev == null || val === prev) return
-    if (hoveredId.value) {
+  () => proximityScale.get() * BASE_ICON_SIZE,
+  (size) => {
+    runOnJS(setCurrentIconSize)(Math.round(size))
+  }
+)
+```
+
+## Hover and release
+
+Track the nearest button center while the finger moves:
+
+```tsx
+useAnimatedReaction(
+  () => ({ x: cursorX.get(), y: cursorY.get() }),
+  (pos) => {
+    let nearestId: string | null = null
+    let nearestDist2 = Infinity
+    const threshold2 = (BUTTON_RADIUS * 3) ** 2
+
+    for (const button of buttonCenters) {
+      const dx = pos.x - button.x
+      const dy = pos.y - button.y
+      const dist2 = dx * dx + dy * dy
+      if (dist2 < nearestDist2) {
+        nearestDist2 = dist2
+        nearestId = button.id
+      }
+    }
+
+    const active = nearestId && nearestDist2 <= threshold2 ? nearestId : null
+
+    if (hoveredId.get() !== active) {
+      hoveredId.set(active)
+      if (active && lastHapticId.get() !== active) {
+        lastHapticId.set(active)
+        runOnJS(Haptics.selectionAsync)()
+      } else if (!active) {
+        lastHapticId.set(null)
+      }
+    }
+  }
+)
+```
+
+On release, either select the hovered action or cancel:
+
+```tsx
+useAnimatedReaction(
+  () => releaseSignal.get(),
+  (value, previous) => {
+    if (previous == null || value === previous) return
+
+    if (hoveredId.get()) {
       runOnJS(Haptics.selectionAsync)()
-      runOnJS(onSelect)(hoveredId.value)
+      runOnJS(onSelect)(hoveredId.get()!)
     } else {
       runOnJS(onCancel)()
     }
@@ -219,70 +337,45 @@ useAnimatedReaction(
 )
 ```
 
-### Step 7: Icon color toggle
+## Button visuals
 
-Render two icon layers per button — active (dark color on theme background) and inactive (white on dark). Toggle opacity based on `hoveredId.value === button.id`.
+Each radial button renders two icon layers:
 
-Use `useDerivedValue` for dynamic icon size tracking proximity scale, bridged to React state via `useAnimatedReaction` + `runOnJS(setCurrentIconSize)`.
+- active icon: dark on light circle
+- inactive icon: white on dark circle
 
-### Step 8: Floating label
+Toggle them by animating opacity off `hoveredId.get() === button.id`.
 
-Show the hovered action's title on the opposite horizontal side of the press point. Clamp vertical position within top two-thirds of screen, within 160px of press Y.
+## Consumer usage
 
-### Step 9: Consumer integration
+This is the minimal integration shape:
 
 ```tsx
-const actions = useMemo(() => [
-  { id: 'star', icon: StarIcon, title: 'Favorite' },
-  { id: 'bookmark', icon: BookmarkIcon, title: 'Save' },
-  { id: 'share', icon: ShareIcon, title: 'Share' },
-], [])
-
-const { longPressGesture, panGesture, isLongPressed, overlayOpen } = useRadialOverlay({
+const { longPressGesture, panGesture } = useRadialOverlay({
   actions,
   onSelect: handleSelect,
   onCancel: handleCancel,
   targetRef: cardRef,
   renderClone: ({ x, y, width, height }) => (
     <View style={{ position: 'absolute', top: y, left: x, width, height }}>
-      {/* Card content clone */}
+      {/* cloned card */}
     </View>
   ),
 })
 
-// Add press scale feedback
-const scale = useSharedValue(1)
-const longPressWithScale = longPressGesture
-  .onBegin(() => { 'worklet'; scale.value = withSpring(0.98) })
-  .onFinalize(() => { 'worklet'; if (overlayOpen.value === 0) scale.value = withSpring(1) })
+const gesture = Gesture.Simultaneous(longPressGesture, panGesture)
 
-const composedGesture = Gesture.Simultaneous(
-  Gesture.Race(longPressWithScale, tapGesture),
-  panGesture
+return (
+  <GestureDetector gesture={gesture}>
+    <View ref={cardRef}>{/* original card */}</View>
+  </GestureDetector>
 )
 ```
 
-## Key Code Patterns
+## Do not change these behaviors
 
-### The release signal pattern
-Instead of checking hover state on gesture end (which requires bridging), increment a shared value. The menu watches it with `useAnimatedReaction` and reads `hoveredId` on the UI thread — no bridge round-trip needed for the selection check.
-
-### Adaptive angle placement
-The menu always fans away from the nearest screen edge. The angle calculation uses a user-space convention (0° = up, CCW+) then converts to RN coordinates. This keeps the API intuitive while handling the coordinate system difference.
-
-### Proximity scaling with nudge
-The proximity effect has two parts: scale (1.0–1.4) makes the button grow, and the nudge (0–32px along the radial axis) pushes it away from center. The nudge uses quadratic easing (`closeness²`) so it accelerates as the finger gets closer, creating a magnetic repulsion feel.
-
-## Common Pitfalls
-
-- **Use `Gesture.Simultaneous()` for long press + pan.** `Gesture.Race()` kills the loser — the pan would die when the long press ends.
-- **`activateAfterLongPress` on pan must match long press `minDuration`.** Mismatched values break scroll or miss finger tracking.
-- **Increment `releaseSignal`, don't toggle.** Boolean toggles can miss changes in `useAnimatedReaction`.
-- **Guard haptics with `lastHapticId`.** Without it, haptics fire every frame during hover.
-- **`measureInWindow` is JS-only.** Bridge from the worklet with `runOnJS` before calling it.
-- **`AnimatedBlurView` must use `useAnimatedProps`, not animated style.** The `intensity` prop isn't a style property.
-- **Button size is animated via `width`/`height` (layout properties).** This is intentional — `transform: [{ scale }]` doesn't affect hit areas. Acceptable because button count is small (3–5) and the menu is short-lived.
-- **Only animate `transform` and `opacity`** for other elements — these run on the GPU. The button `width`/`height` animation is the deliberate exception.
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers.
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
-- **Use `Gesture.Tap()` instead of `Pressable`** for the card's press scale animation — keeps it on the UI thread.
+- Long press duration is `500ms`.
+- Pan uses `activateAfterLongPress(500)` to match the long press.
+- Release is tracked with an incrementing `releaseSignal`, not a boolean.
+- Use `runOnJS` for haptics, selection, cancellation, and `measureInWindow`.
+- Keep entrance damping high (`80`) so buttons do not overshoot.

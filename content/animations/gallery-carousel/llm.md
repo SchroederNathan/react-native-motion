@@ -1,30 +1,27 @@
-# Gallery Stack Carousel - Agent Instructions
+# Gallery Stack Carousel - Implementation Brief
 
-You are implementing the Gallery Stack Carousel animation from `react-native-motion`. This is a two-part animation: a stacked card carousel with a stack-to-carousel blend, and a blurred backdrop that crossfades between images.
+This animation is two components:
 
-## Animation Specification
+- `GalleryStackCarousel.tsx`
+- `CarouselBackdrop.tsx`
 
-- **Type**: Stacked card carousel with blurred backdrop crossfade
-- **Libraries**: React Native Reanimated, React Native Gesture Handler, react-native-worklets, expo-blur, expo-image, expo-linear-gradient, @react-native-masked-view/masked-view
-- **Carousel physics**: Spring snapping with velocity projection
-- **Backdrop physics**: Timing-based opacity crossfade (500ms)
-- **Layout**: All cards rendered simultaneously via `.map()` with `position: 'absolute'` — no list virtualization (card count is small and all are visible)
-- **API conventions**: Use `.get()`/`.set()` on shared values (not `.value`) for React Compiler compatibility. Use `scheduleOnRN` from `react-native-worklets` instead of `runOnJS`.
+The screen only coordinates `activeIndex` and passes it into both pieces.
 
-## Types and Constants
+## Required packages
 
 ```tsx
-import Animated, {
-  interpolate,
-  Extrapolation,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { scheduleOnRN } from 'react-native-worklets'
+react-native-reanimated
+react-native-gesture-handler
+react-native-worklets
+expo-blur
+expo-image
+expo-linear-gradient
+@react-native-masked-view/masked-view
+```
 
+## Data shape and layout constants
+
+```tsx
 interface CarouselItem {
   id: string
   image: string
@@ -40,67 +37,99 @@ const VISIBLE_STACK_COUNT = 6
 const STACK_OFFSET = (SCREEN_WIDTH - LEFT_MARGIN - ITEM_WIDTH) / (VISIBLE_STACK_COUNT - 1)
 ```
 
-## Implementation Steps
+## Gallery card layout blend
 
-### Step 1: CarouselBackdrop — crossfade between blurred images
+Every card stays mounted and absolutely positioned. The main worklet blends a left-fanned stack into a centered carousel as `activeIndex` moves from `0` to `1`.
 
-Track `displayedIndex` and `previousIndex` in state. When `currentIndex` changes, update both and animate a `fadeAnim` shared value from 0 to 1 with `withTiming(1, { duration: 500 })`. When the animation finishes, sync `previousIndex` to `currentIndex` via `scheduleOnRN`.
+```tsx
+const animatedStyle = useAnimatedStyle(() => {
+  const diff = index - activeIndex.get()
+  const galleryFactor = interpolate(
+    activeIndex.get(),
+    [0, 1],
+    [1, 0],
+    Extrapolation.CLAMP,
+  )
 
-Render two `Image` (from `expo-image`) layers (previous always visible, current fades in) inside a `MaskedView`. The mask is a `LinearGradient` with `locations={[0, 0.7, 1]}` and `colors={['black', 'black', 'transparent']}` — this fades the bottom edge to transparent.
+  const stackX = LEFT_MARGIN + index * STACK_OFFSET
+  const stackScale = Math.max(0.6, 1 - index * 0.06)
 
-Outside the `MaskedView`, add a `BlurView` with `intensity={blurIntensity}` and `tint="dark"` for the frosted glass effect. Then add a `View` with `experimental_backgroundImage: 'linear-gradient(...)'` that fades from transparent to `backgroundColor` at the bottom.
+  const centeredX =
+    SCREEN_WIDTH / 2 - ITEM_WIDTH / 2 + diff * (ITEM_WIDTH + ITEM_SPACING)
+  const centeredScale = interpolate(
+    Math.abs(diff),
+    [0, 1],
+    [1, 0.85],
+    Extrapolation.CLAMP,
+  )
 
-Prefetch adjacent images with `Image.prefetch()` whenever `currentIndex` changes.
+  const translateX = galleryFactor * stackX + (1 - galleryFactor) * centeredX
+  const scale =
+    (galleryFactor * stackScale + (1 - galleryFactor) * centeredScale) *
+    pressScale.get()
 
-### Step 2: GalleryCard — the stack-to-carousel blend
+  return {
+    transform: [{ translateX }, { scale }],
+    zIndex: totalItems - index,
+  }
+})
+```
 
-Each card computes its position by blending two layouts using a `galleryFactor`:
+Keep the dark overlay per card as a separate animated layer:
 
-**Gallery factor** controls the blend: `interpolate(activeIndex.get(), [0, 1], [1, 0], CLAMP)` — fully stacked at index 0, fully carousel at index 1+.
+```tsx
+const overlayStyle = useAnimatedStyle(() => {
+  const diff = index - activeIndex.get()
+  const absDiff = Math.abs(diff)
+  const galleryFactor = interpolate(activeIndex.get(), [0, 1], [1, 0], Extrapolation.CLAMP)
 
-**Stack layout**: `stackX = LEFT_MARGIN + index * STACK_OFFSET`, `stackScale = max(0.6, 1 - index * 0.06)`. Cards fan out from the left with progressively smaller scale.
+  const carouselDarkness = interpolate(
+    absDiff,
+    [0, 1, 2, 3],
+    [0, 0.5, 0.7, 0.85],
+    Extrapolation.CLAMP,
+  )
 
-**Carousel layout**: `centeredX = SCREEN_WIDTH / 2 - ITEM_WIDTH / 2 + diff * (ITEM_WIDTH + ITEM_SPACING)`, `centeredScale = interpolate(abs(diff), [0, 1], [1, 0.85], CLAMP)`. Active card is centered, neighbors are slightly smaller.
+  const stackDarkness = index === 0 ? 0 : 0.5
 
-**Blend**: `translateX = galleryFactor * stackX + (1 - galleryFactor) * centeredX`. Same for scale. Set `zIndex = totalItems - index` so card 0 is always on top.
+  return {
+    opacity: interpolate(
+      galleryFactor,
+      [0, 1],
+      [carouselDarkness, stackDarkness],
+      Extrapolation.CLAMP,
+    ),
+  }
+})
+```
 
-### Step 3: Dark overlay per card
+## Gestures
 
-Each card has an `Animated.View` overlay with `backgroundColor: 'black'` and animated opacity:
-
-- **Carousel mode**: darkness increases with distance from active card — `interpolate(absDiff, [0, 1, 2, 3], [0, 0.5, 0.7, 0.85])`
-- **Stack mode**: front card (index 0) has no overlay, all others get `0.5` opacity
-- **Blend** between the two using `galleryFactor`
-
-### Step 4: Pan gesture — swipe to browse
+The container owns the swipe. Each card owns a tap gesture for press feedback and optional selection.
 
 ```tsx
 const activeIndex = useSharedValue(0)
 const startIndex = useSharedValue(0)
 
-const gesture = Gesture.Pan()
+const panGesture = Gesture.Pan()
   .activeOffsetX([-10, 10])
   .failOffsetY([-10, 10])
   .onStart(() => {
     startIndex.set(activeIndex.get())
   })
   .onUpdate((e) => {
-    const newIndex = startIndex.get() - e.translationX / (ITEM_WIDTH + ITEM_SPACING)
-    activeIndex.set(Math.max(0, Math.min(items.length - 1, newIndex)))
+    const nextIndex = startIndex.get() - e.translationX / (ITEM_WIDTH + ITEM_SPACING)
+    activeIndex.set(Math.max(0, Math.min(items.length - 1, nextIndex)))
   })
   .onEnd((e) => {
     const projected = activeIndex.get() - e.velocityX / 1000
     const target = Math.max(0, Math.min(items.length - 1, Math.round(projected)))
     activeIndex.set(withSpring(target))
-    scheduleOnRN(onIndexChange, target)
+    if (onIndexChange) scheduleOnRN(onIndexChange, target)
   })
 ```
 
-Wrap the entire card container in a single `GestureDetector` with this pan gesture.
-
-### Step 5: Tap gesture — press feedback
-
-Add a `Gesture.Tap()` to each card with press scale animation (use `Gesture.Tap`, not `Pressable`, to keep press animations on the UI thread):
+Tap gesture per card:
 
 ```tsx
 const pressScale = useSharedValue(1)
@@ -111,18 +140,16 @@ const tapGesture = Gesture.Tap()
   })
   .onEnd(() => {
     pressScale.set(withSpring(1))
-    scheduleOnRN(onPressItem, item, index)
+    if (onPressItem) scheduleOnRN(onPressItem, item, index)
   })
   .onFinalize(() => {
     pressScale.set(withSpring(1))
   })
 ```
 
-Multiply `pressScale.get()` into the card's final `scale` transform.
+## Card render structure
 
-### Step 6: Render the cards
-
-All cards are absolutely positioned inside a fixed-height container. Pan gesture wraps the container, each card gets its own tap gesture:
+Render all cards inside one fixed-height container:
 
 ```tsx
 <GestureDetector gesture={panGesture}>
@@ -141,65 +168,118 @@ All cards are absolutely positioned inside a fixed-height container. Pan gesture
 </GestureDetector>
 ```
 
-### Step 7: Compose the screen
+Card styling should stay simple:
+
+```tsx
+const styles = StyleSheet.create({
+  card: {
+    position: 'absolute',
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
+    borderRadius: 6,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.16)',
+  },
+})
+```
+
+## Backdrop crossfade
+
+`CarouselBackdrop.tsx` keeps two image layers:
+
+- `previousIndex`
+- `displayedIndex`
+
+When `currentIndex` changes:
+
+```tsx
+const [displayedIndex, setDisplayedIndex] = useState(currentIndex)
+const [previousIndex, setPreviousIndex] = useState(currentIndex)
+const fadeAnim = useSharedValue(1)
+
+useEffect(() => {
+  if (currentIndex !== displayedIndex) {
+    setPreviousIndex(displayedIndex)
+    setDisplayedIndex(currentIndex)
+    fadeAnim.set(0)
+    fadeAnim.set(
+      withTiming(1, { duration: 500 }, (finished) => {
+        if (finished) {
+          scheduleOnRN(setPreviousIndex, currentIndex)
+        }
+      })
+    )
+  }
+}, [currentIndex, displayedIndex, fadeAnim])
+```
+
+Prefetch the adjacent backdrop images:
+
+```tsx
+useEffect(() => {
+  const urls = [images[currentIndex - 1], images[currentIndex + 1]].filter(Boolean) as string[]
+  urls.forEach((url) => Image.prefetch(url))
+}, [currentIndex, images])
+```
+
+Render the backdrop like this:
+
+```tsx
+<View style={[styles.backdrop, { height }]} pointerEvents="none">
+  <MaskedView
+    style={{ height, width: '100%' }}
+    maskElement={
+      <LinearGradient
+        locations={[0, 0.7, 1]}
+        colors={['black', 'black', 'transparent']}
+        style={StyleSheet.absoluteFill}
+      />
+    }
+  >
+    <Image source={{ uri: images[previousIndex] }} style={[styles.image, { height }]} contentFit="cover" />
+    <Animated.View style={[StyleSheet.absoluteFill, foregroundStyle]}>
+      <Image source={{ uri: images[displayedIndex] }} style={[styles.image, { height }]} contentFit="cover" />
+    </Animated.View>
+  </MaskedView>
+
+  <BlurView style={[StyleSheet.absoluteFill, { height }]} intensity={blurIntensity} tint="dark" />
+
+  {/* Any equivalent bottom fade is fine. The demo uses a gradient-style overlay here. */}
+</View>
+```
+
+## Screen composition
 
 ```tsx
 const [activeIndex, setActiveIndex] = useState(0)
 
-<View style={{ flex: 1, backgroundColor: '#000' }}>
-  <CarouselBackdrop
-    images={items.map((i) => i.backdropImage ?? i.image)}
-    currentIndex={activeIndex}
-    height={400}
-    backgroundColor="#000"
-  />
-  <View style={{ marginTop: 200 }}>
-    <GalleryStackCarousel
-      items={items}
-      onIndexChange={setActiveIndex}
+return (
+  <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <CarouselBackdrop
+      images={items.map((item) => item.backdropImage ?? item.image)}
+      currentIndex={activeIndex}
+      height={400}
+      backgroundColor="#000"
     />
+
+    <View style={{ marginTop: 200 }}>
+      <GalleryStackCarousel
+        items={items}
+        onIndexChange={setActiveIndex}
+        onPressItem={(item) => console.log(item.id)}
+      />
+    </View>
   </View>
-</View>
+)
 ```
 
-## Key Code Pattern
+## Do not change these behaviors
 
-The core animation worklet that blends stack and carousel layouts:
-
-```tsx
-const animatedStyle = useAnimatedStyle(() => {
-  const diff = index - activeIndex.get()
-  const galleryFactor = interpolate(activeIndex.get(), [0, 1], [1, 0], Extrapolation.CLAMP)
-
-  // Stack: fanned from left edge
-  const stackX = LEFT_MARGIN + index * STACK_OFFSET
-  const stackScale = Math.max(0.6, 1 - index * 0.06)
-
-  // Carousel: centered with spacing
-  const centeredX = SCREEN_WIDTH / 2 - ITEM_WIDTH / 2 + diff * (ITEM_WIDTH + ITEM_SPACING)
-  const centeredScale = interpolate(Math.abs(diff), [0, 1], [1, 0.85], Extrapolation.CLAMP)
-
-  // Blend between layouts
-  const translateX = galleryFactor * stackX + (1 - galleryFactor) * centeredX
-  const scale = (galleryFactor * stackScale + (1 - galleryFactor) * centeredScale) * pressScale.get()
-
-  return {
-    transform: [{ translateX }, { scale }],
-    zIndex: totalItems - index,
-  }
-})
-```
-
-## Common Pitfalls
-
-- **`galleryFactor` only spans index 0 → 1.** The stack-to-carousel blend happens during the first swipe. Once past index 1, it stays in full carousel mode. This is intentional — don't change the interpolation range.
-- **Cards must be `position: 'absolute'`** inside the carousel container, which needs an explicit `height` equal to `ITEM_HEIGHT`.
-- **`zIndex` must be static.** Set `zIndex: totalItems - index` so card 0 is always on top. Animating zIndex causes flicker.
-- **`BlurView` goes outside `MaskedView`**, not inside. If placed inside, the blur gets clipped by the gradient mask and looks broken.
-- **Prefetch adjacent backdrop images** with `Image.prefetch()` to prevent flicker during crossfade.
-- **Velocity projection matters for feel.** The snap target is `activeIndex.get() - velocityX / 1000` rounded to the nearest integer. Without velocity projection, fast swipes only advance one card and feel sluggish.
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers or animation callbacks.
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
-- **Only animate `transform` and `opacity`** — these run on the GPU. Never animate layout properties like `width`, `height`, `top`, `left`, or `margin`.
-- **Use `Gesture.Tap()` instead of `Pressable`** for press animations — keeps the scale animation on the UI thread without bridge overhead.
-- **Always include `borderCurve: 'continuous'`** alongside `borderRadius` for smooth iOS-native corner curves.
+- `galleryFactor` only interpolates from index `0` to `1`.
+- Cards are always `position: 'absolute'`.
+- `zIndex` is static: `totalItems - index`.
+- Use velocity projection on pan end before rounding.
+- Keep `BlurView` outside the `MaskedView`.
+- Use `.get()` / `.set()` on shared values.
+- Use `scheduleOnRN` for JS callbacks from gestures and animation completions.

@@ -5,19 +5,36 @@ import {
   useState,
   useCallback,
   useLayoutEffect,
+  useMemo,
+  isValidElement,
   type ReactNode,
 } from 'react'
+
+function extractText(node: ReactNode): string {
+  if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
+  if (!node) return ''
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (isValidElement(node)) return extractText((node.props as any).children)
+  return ''
+}
+
+function countLines(text: string): number {
+  return text.replace(/\n$/, '').split('\n').length
+}
 
 export function CodeBlock({ children, title }: { children: ReactNode; title?: string }) {
   const codeRef = useRef<HTMLPreElement>(null)
   const [copied, setCopied] = useState(false)
-  const [lineCount, setLineCount] = useState(1)
+
+  const initialLineCount = useMemo(() => countLines(extractText(children)), [children])
+  const [lineCount, setLineCount] = useState(initialLineCount)
 
   useLayoutEffect(() => {
     const code = codeRef.current?.querySelector('code')
     if (code) {
-      const text = code.textContent || ''
-      setLineCount(text.replace(/\n$/, '').split('\n').length)
+      const count = countLines(code.textContent || '')
+      setLineCount(count)
     }
   }, [children])
 
