@@ -78,16 +78,16 @@
     .border-shadow {
       box-shadow:
         0px 0px 0px 1px oklch(from var(--color-taupe-200) l c h / 0.06),
-        0px 1px 2px -1px oklch(from var(--color-taupe-200) l c h / 0.06),
-        0px 2px 4px 0px oklch(from var(--color-taupe-200) l c h / 0.04);
+        0px 1px 2px -1px oklch(from var(--color-taupe-950) l c h / 0.06),
+        0px 2px 4px 0px oklch(from var(--color-taupe-950) l c h / 0.04);
     }
 
     .border-shadow:hover,
     .border-shadow:focus-within {
       box-shadow:
         0px 0px 0px 1px oklch(from var(--color-taupe-200) l c h / 0.08),
-        0px 1px 2px -1px oklch(from var(--color-taupe-200) l c h / 0.08),
-        0px 2px 4px 0px oklch(from var(--color-taupe-200) l c h / 0.06);
+        0px 1px 2px -1px oklch(from var(--color-taupe-950) l c h / 0.08),
+        0px 2px 4px 0px oklch(from var(--color-taupe-950) l c h / 0.06);
     }
   }
 }
