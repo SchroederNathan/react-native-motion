@@ -1,14 +1,14 @@
 export const meta = {
   title: 'Radial Menu',
   slug: 'radial-menu',
-  description: 'A long-press radial action menu with adaptive positioning, proximity-based scaling, and haptic feedback.',
+  description: 'Long-press radial menu with blur overlay, cloned card, proximity-scaled actions, edge-aware fan angles, and haptics.',
   video: '/videos/radial-menu.mp4',
   tags: ['radial', 'menu', 'long-press', 'gesture', 'haptics', 'spring', 'overlay'],
 }
 
 ## Overview
 
-A **long-press radial action menu** that fans out from the touch point. The screen dims with a blur overlay, the pressed card is cloned into the overlay, and circular action buttons spring outward. Buttons scale up on proximity and nudge away from the finger — releasing over a button triggers selection with haptic feedback. The menu automatically adapts its angle to fan away from screen edges.
+A **long-press radial menu** from the touch point: blur dims the screen, the pressed card clones into the overlay, and circular actions spring out. Buttons scale with proximity and shift aside from the finger. Release on a button to select (haptics). Fan angles adjust so actions stay clear of the screen edges.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'expo-blur', 'expo-haptics', 'expo-image']} />
 

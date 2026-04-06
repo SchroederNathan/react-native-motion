@@ -8,7 +8,7 @@ export const meta = {
 
 ## Overview
 
-A two-part animation pairing a **stacked card carousel** with a **blurred backdrop crossfade**. At index 0 cards are fanned in a deck — swiping blends them into a centered carousel. The backdrop crossfades between blurred images to match the active card.
+A **stacked card carousel** plus **blurred backdrop crossfade**. On index 0 the cards sit in a fanned deck; the first swipe blends them into a centered carousel. The backdrop crossfades blurred images to the active card.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-blur', 'expo-image', 'expo-linear-gradient', '@react-native-masked-view/masked-view']} />
 
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
 
 ## Common Pitfalls
 
-- **`galleryFactor` only spans index 0 to 1.** The stack-to-carousel blend happens during the first swipe. Once past index 1, it stays in full carousel mode. This is intentional — don't widen the interpolation range.
+- **`galleryFactor` only spans index 0 to 1.** The stack-to-carousel blend is the first swipe; after index 1 you stay in full carousel. Don't widen the interpolation range.
 
 - **Cards must be `position: 'absolute'`** inside the carousel container, which needs an explicit `height` equal to `ITEM_HEIGHT`. Without absolute positioning, the stack layout won't work.
 

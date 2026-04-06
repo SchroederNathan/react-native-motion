@@ -8,14 +8,13 @@ export const meta = {
 
 ## Overview
 
-A **glassmorphic tab bar** inspired by Linear's mobile app. A frosted-glass pill holds tab icons that can be tapped or swiped between. Dragging up morphs the pill into a full menu panel with staggered item reveals. A search button expands into a search bar while the pill collapses away. Every interaction features a liquid glass stretch effect — the pill deforms elastically when dragged past its bounds — and a radial glow that follows the touch point.
+A **glassmorphic tab bar** modeled on Linear's mobile app: a frosted-glass pill with tappable, swipeable tab icons. Drag up to open a full menu with staggered rows. The search control grows into a search bar while the pill collapses. Liquid glass stretch bends the pill when you drag past its edges; a radial glow tracks your finger.
 
-Key animation behaviors:
-- **Pill-to-menu morph**: The pill scales through a squeeze (scaleX dip at 15%) then expands in height to reveal a staggered menu
-- **Liquid glass stretch**: Overdrag creates a damped elastic deformation with directional stretch and cross-axis compression
-- **Touch-tracking glow**: A radial SVG gradient follows the finger and fades out on release
-- **Search transition**: The pill width animates to zero while the search bar expands, with the close button sliding in
-- **Staggered menu items**: Header, divider, and 7 menu items animate in with 40ms stagger delays, reverse on close
+- **Pill-to-menu morph**: Squeeze (scaleX dips around 15%), then height grows into the staggered menu
+- **Liquid glass stretch**: Overdrag uses damped stretch along the drag axis and slight squeeze across it
+- **Touch-tracking glow**: Radial SVG gradient at the finger, fades on release
+- **Search transition**: Pill width goes to zero as the search bar grows; close button slides in
+- **Staggered menu items**: Header, divider, and seven rows use 40ms stagger on open, reversed on close
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-keyboard-controller', 'expo-blur', 'expo-haptics', 'expo-linear-gradient', 'react-native-svg', '@react-native-masked-view/masked-view', 'lucide-react-native', 'react-native-safe-area-context', 'react-native-worklets']} />
 
@@ -1648,13 +1647,13 @@ const closeStyles = StyleSheet.create({
 
 - **Use `Gesture.Simultaneous()` for long press + pan on the pill.** The long press handles touch-down state while the pan tracks drag movement. Using `Gesture.Race()` would kill the pan when the long press resolves.
 
-- **Use `Gesture.Race()` for the search button's tap + pan.** Here you want tap OR pan — not both. The tap handles toggle, the pan handles the stretch effect.
+- **Use `Gesture.Race()` for the search button's tap + pan.** You need tap or pan, not both: tap toggles, pan drives the stretch.
 
 - **Guard menu/search mutual exclusion.** `toggleMenu` checks `searchProgress > 0.5` and vice versa. Without this, both modes can activate simultaneously.
 
-- **The liquid glass stretch uses damped overflow, not raw delta.** `dampedX = sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))` gives a natural rubber-band feel that asymptotically approaches MAX_PULL.
+- **The liquid glass stretch uses damped overflow, not raw delta.** `dampedX = sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))` gives rubber-band resistance that levels off near MAX_PULL.
 
-- **The pill-to-menu morph uses a non-linear scaleX curve.** It dips to 0.7 at 15% progress, recovers to 0.85 at 50%, and reaches 1.0 at 85%. This creates the characteristic "squeeze then expand" feel.
+- **The pill-to-menu morph uses a non-linear scaleX curve.** It dips to 0.7 at 15% progress, recovers to 0.85 at 50%, and reaches 1.0 at 85%, which reads as squeeze-then-expand.
 
 - **Menu items stagger in at 40ms intervals, out at 10ms.** The asymmetry makes the close feel snappier. Items stagger top-to-bottom on open and bottom-to-top on close.
 
@@ -1664,6 +1663,6 @@ const closeStyles = StyleSheet.create({
 
 - **`GlassMaterial` accepts both static and animated `borderRadius`.** It detects shared values via duck-typing (`typeof borderRadius === 'object' && 'get' in borderRadius`) and switches between static styles and `useAnimatedStyle` accordingly.
 
-- **The glow overlay uses a two-phase progress.** Phase 1 (0→1): glow appears at touch point. Phase 2 (1→2): glow fades out while scaling up 4x, creating a ripple effect on release.
+- **The glow overlay uses a two-phase progress.** From 0 to 1 the glow sits on the touch; from 1 to 2 it fades while scaling up 4x for a release ripple.
 
-- **Keyboard animation uses `react-native-keyboard-controller`.** The entire tab bar translates up with the keyboard via `useReanimatedKeyboardAnimation`, keeping it accessible during search input.
+- **Keyboard animation uses `react-native-keyboard-controller`.** `useReanimatedKeyboardAnimation` moves the tab bar with the keyboard so search stays usable.
