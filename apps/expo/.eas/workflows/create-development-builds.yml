@@ -1,0 +1,15 @@
+name: Create development builds
+
+jobs:
+  android_development_build:
+    name: Build Android
+    type: build
+    params:
+      platform: android
+      profile: development
+  ios_development_build:
+    name: Build iOS
+    type: build
+    params:
+      platform: ios
+      profile: development

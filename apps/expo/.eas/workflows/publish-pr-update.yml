@@ -1,0 +1,12 @@
+name: Publish PR update
+
+on:
+  pull_request:
+    branches: ['*']
+
+jobs:
+  publish_update:
+    name: Publish update
+    type: update
+    params:
+      branch: ${{ github.ref_name || 'pr-preview' }}

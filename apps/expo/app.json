@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "expo-app",
-    "slug": "expo-app",
-    "scheme": "expo-app",
+    "name": "React Native Motion",
+    "slug": "react-native-motion",
+    "scheme": "react-native-motion",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,7 +19,13 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.exponathan.expoapp"
+      "package": "com.exponathan.expoapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +39,19 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "90cd6b8c-b589-4620-9893-eb8e4e150eab"
+      }
+    },
+    "owner": "exponathan",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/90cd6b8c-b589-4620-9893-eb8e4e150eab"
+    }
   }
 }
