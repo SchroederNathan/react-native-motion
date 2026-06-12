@@ -2,40 +2,12 @@
   "name": "react-native-motion",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@headlessui/react": "^2.2.9",
-    "@mapbox/rehype-prism": "^0.9.0",
-    "@mdx-js/loader": "^3.1.1",
-    "@mdx-js/react": "^3.1.1",
-    "@next/mdx": "^16.2.1",
-    "@react-three/fiber": "^9.5.0",
-    "@react-three/postprocessing": "^3.0.4",
-    "@types/mdx": "^2.0.13",
-    "@vercel/analytics": "^2.0.1",
-    "clsx": "^2.1.1",
-    "motion": "^12.38.0",
-    "next": "16.2.1",
-    "postprocessing": "^6.39.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "remark-gfm": "^4.0.1",
-    "three": "^0.183.2"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "website": "bun run --filter website dev",
+    "expo": "bun run --filter expo-app start"
   },
   "ignoreScripts": [
     "sharp",
@@ -44,5 +16,6 @@
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
