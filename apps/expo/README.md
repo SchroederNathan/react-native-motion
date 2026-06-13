@@ -9,7 +9,7 @@ The demo app for [React Native Motion](../../README.md). Every animation in the 
 
 ## Stack
 
-- [Expo SDK 56](https://docs.expo.dev/versions/v56.0.0/) with [expo-router](https://docs.expo.dev/router/introduction/)
+098706- [Expo SDK 56](https://docs.expo.dev/versions/v56.0.0/) with [expo-router](https://docs.expo.dev/router/introduction/)
 - [Reanimated 4](https://docs.swmansion.com/react-native-reanimated/) + react-native-worklets
 - expo-dev-client — the app runs in a development build, not Expo Go
 
