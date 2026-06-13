@@ -1,3 +1,4 @@
+import { ThemeProvider } from '@/theme';
 import {
   Manrope_400Regular,
   Manrope_500Medium,
@@ -5,15 +6,19 @@ import {
   Manrope_700Bold,
   useFonts,
 } from '@expo-google-fonts/manrope';
+import { ObserveRoot, useObserve } from 'expo-observe';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect, useState } from 'react';
 import { PlatformColor } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { ThemeProvider } from '@/theme';
 
 const isIOS = process.env.EXPO_OS === 'ios';
 
-export default function RootLayout() {
+function RootLayout() {
+  const [isReady, setIsReady] = useState(false);
+  const { markInteractive } = useObserve();
+
   const [fontsLoaded] = useFonts({
     Manrope_400Regular,
     Manrope_500Medium,
@@ -21,7 +26,26 @@ export default function RootLayout() {
     Manrope_700Bold,
   });
 
-  if (!fontsLoaded) return null;
+  useEffect(() => {
+    async function prepare() {
+      try {
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setIsReady(true);
+      }
+    }
+
+    prepare();
+  }, []);
+
+  useEffect(() => {
+    if (isReady) {
+      markInteractive();
+    }
+  }, [isReady, markInteractive]);
+
+  if (!fontsLoaded || !isReady) return null;
 
   return (
     <ThemeProvider>
@@ -42,3 +66,5 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+export default ObserveRoot.wrap(RootLayout);

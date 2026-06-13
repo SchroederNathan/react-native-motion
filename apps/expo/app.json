@@ -5,11 +5,12 @@
     "scheme": "react-native-motion",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icons/app-icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "icon": "./assets/icons/app.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.exponathan.expoapp",
+      "bundleIdentifier": "com.schroedernathan.rnmotion",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -22,7 +23,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.exponathan.expoapp",
+      "package": "com.schroedernathan.rnmotion",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
@@ -41,7 +42,20 @@
         }
       ],
       "expo-video",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FFFFFF",
+          "image": "./assets/icons/splash-icon-dark.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "dark": {
+            "backgroundColor": "#0A0A0A",
+            "image": "./assets/icons/splash-icon-light.png"
+          }
+        }
+      ]
     ],
     "extra": {
       "router": {},

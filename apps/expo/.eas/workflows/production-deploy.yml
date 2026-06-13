@@ -1,0 +1,19 @@
+name: Production deploy
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build_ios:
+    name: Build iOS (production)
+    type: build
+    params:
+      platform: ios
+      profile: production
+  submit_ios:
+    name: Submit to App Store Connect
+    type: submit
+    needs: [build_ios]
+    params:
+      profile: production
+      build_id: ${{ needs.build_ios.outputs.build_id }}
