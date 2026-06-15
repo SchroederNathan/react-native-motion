@@ -11,6 +11,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { PlatformColor } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 const isIOS = process.env.EXPO_OS === 'ios';
@@ -48,22 +49,24 @@ function RootLayout() {
   if (!fontsLoaded || !isReady) return null;
 
   return (
-    <ThemeProvider>
-      <KeyboardProvider>
-        <Stack
-          screenOptions={{
-            headerLargeTitle: true,
-            headerTransparent: true,
-            headerShadowVisible: false,
-            headerLargeTitleShadowVisible: false,
-            headerBlurEffect: 'none',
-            headerLargeStyle: { backgroundColor: 'transparent' },
-            headerTitleStyle: isIOS ? { color: PlatformColor('label') } : undefined,
-          }}
-        />
-        <StatusBar style="auto" />
-      </KeyboardProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <KeyboardProvider>
+          <Stack
+            screenOptions={{
+              headerLargeTitle: true,
+              headerTransparent: true,
+              headerShadowVisible: false,
+              headerLargeTitleShadowVisible: false,
+              headerBlurEffect: 'none',
+              headerLargeStyle: { backgroundColor: 'transparent' },
+              headerTitleStyle: isIOS ? { color: PlatformColor('label') } : undefined,
+            }}
+          />
+          <StatusBar style="auto" />
+        </KeyboardProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

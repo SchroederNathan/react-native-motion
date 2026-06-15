@@ -1,6 +1,7 @@
 import { FlashList, type ViewToken } from '@shopify/flash-list';
+import { Link } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { animations, type Animation } from '@/data/animations';
 import { useTheme } from '@/theme';
 import { VideoCard } from './video-card';
@@ -23,7 +24,11 @@ export function AnimationList() {
 
   const renderItem = useCallback(
     ({ item }: { item: Animation }) => (
-      <VideoCard animation={item} isActive={item.slug === activeSlug} />
+      <Link href={`/animations/${item.slug}`} asChild>
+        <Pressable>
+          <VideoCard animation={item} isActive={item.slug === activeSlug} />
+        </Pressable>
+      </Link>
     ),
     [activeSlug],
   );
