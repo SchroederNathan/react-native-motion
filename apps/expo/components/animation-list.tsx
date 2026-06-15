@@ -2,9 +2,45 @@ import { FlashList, type ViewToken } from '@shopify/flash-list';
 import { Link } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { animations, type Animation } from '@/data/animations';
 import { useTheme } from '@/theme';
 import { VideoCard } from './video-card';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function PressableCard({
+  animation,
+  isActive,
+}: {
+  animation: Animation;
+  isActive: boolean;
+}) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Link href={`/animations/${animation.slug}`} asChild>
+      <AnimatedPressable
+        style={animatedStyle}
+        onPressIn={() => {
+          scale.value = withSpring(0.98);
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1);
+        }}
+      >
+        <VideoCard animation={animation} isActive={isActive} />
+      </AnimatedPressable>
+    </Link>
+  );
+}
 
 export function AnimationList() {
   const { colors, tokens } = useTheme();
@@ -24,11 +60,7 @@ export function AnimationList() {
 
   const renderItem = useCallback(
     ({ item }: { item: Animation }) => (
-      <Link href={`/animations/${item.slug}`} asChild>
-        <Pressable>
-          <VideoCard animation={item} isActive={item.slug === activeSlug} />
-        </Pressable>
-      </Link>
+      <PressableCard animation={item} isActive={item.slug === activeSlug} />
     ),
     [activeSlug],
   );
