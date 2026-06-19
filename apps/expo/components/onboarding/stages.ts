@@ -16,28 +16,18 @@ export interface OnboardingStage {
 
 export const stages: OnboardingStage[] = [
   {
-    id: 'welcome',
+    id: 'gallery',
     title: 'A gallery of React Native animations',
-    lottie: require('@/assets/lottie/welcome.json'),
+    lottie: require('@/assets/lottie/gallery.json'),
   },
   {
-    id: 'search',
-    title: 'Search by name or tag',
-    lottie: require('@/assets/lottie/search.json'),
+    id: 'source',
+    title: 'Grab the code, build it into your app',
+    lottie: require('@/assets/lottie/source.json'),
   },
   {
-    id: 'autoplay',
-    title: 'The preview in view plays itself',
-    lottie: require('@/assets/lottie/autoplay.json'),
-  },
-  {
-    id: 'themes',
-    title: 'Every demo themed to match',
-    lottie: require('@/assets/lottie/themes.json'),
-  },
-  {
-    id: 'get-started',
-    title: 'Tap any animation to start',
-    lottie: require('@/assets/lottie/get-started.json'),
+    id: 'agent-ready',
+    title: 'Or let your agent build it for you',
+    lottie: require('@/assets/lottie/agent-ready.json'),
   },
 ];
