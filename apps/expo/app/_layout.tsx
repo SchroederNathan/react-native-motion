@@ -1,3 +1,4 @@
+import { loadOnboardingState } from '@/components/onboarding/use-onboarding';
 import { ThemeProvider } from '@/theme';
 import {
   Manrope_400Regular,
@@ -6,8 +7,9 @@ import {
   Manrope_700Bold,
   useFonts,
 } from '@expo-google-fonts/manrope';
+import * as Linking from 'expo-linking';
 import { ObserveRoot, useObserve } from 'expo-observe';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { PlatformColor } from 'react-native';
@@ -18,6 +20,7 @@ const isIOS = process.env.EXPO_OS === 'ios';
 
 function RootLayout() {
   const [isReady, setIsReady] = useState(false);
+  const [shouldOnboard, setShouldOnboard] = useState(false);
   const { markInteractive } = useObserve();
 
   const [fontsLoaded] = useFonts({
@@ -30,6 +33,14 @@ function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
+        const [initialUrl, hasOnboarded] = await Promise.all([
+          Linking.getInitialURL(),
+          loadOnboardingState(),
+        ]);
+        // A deep link into a specific animation (QR / universal link) must reach
+        // that screen even on first launch — never intercept it with onboarding.
+        const launchedToContent = !!initialUrl && initialUrl.includes('/animations/');
+        setShouldOnboard(!hasOnboarded && !launchedToContent);
       } catch (e) {
         console.warn(e);
       } finally {
@@ -45,6 +56,12 @@ function RootLayout() {
       markInteractive();
     }
   }, [isReady, markInteractive]);
+
+  useEffect(() => {
+    if (isReady && shouldOnboard) {
+      router.replace('/onboarding');
+    }
+  }, [isReady, shouldOnboard]);
 
   if (!fontsLoaded || !isReady) return null;
 

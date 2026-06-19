@@ -11,6 +11,8 @@ export const spacing = {
   lg: 16,
   xl: 24,
   '2xl': 32,
+  '3xl': 40,
+  '4xl': 48,
 } as const;
 
 export const radius = {
@@ -22,10 +24,10 @@ export const radius = {
 } as const;
 
 export const fontSize = {
-  caption: 13,
-  body: 15,
-  title: 17,
-  largeTitle: 28,
+  caption: 14,
+  body: 16,
+  title: 20,
+  largeTitle: 32,
 } as const;
 
 /**

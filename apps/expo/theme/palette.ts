@@ -7,17 +7,17 @@
  * these values rather than redeclaring hex codes.
  */
 export const taupe = {
-  50: '#fcfbfa',
-  100: '#f4f2f1',
-  200: '#e9e5e3',
-  300: '#d7d1cd',
-  400: '#a9a09a',
-  500: '#7a716a',
-  600: '#5e5751',
-  700: '#4c4641',
-  800: '#352f2c',
-  900: '#28231f',
-  950: '#191613',
+  50: '#fbfaf9',
+  100: '#f5f3f0',
+  200: '#e7e2dc',
+  300: '#d3cbc0',
+  400: '#aa9e8d',
+  500: '#867865',
+  600: '#6c6050',
+  700: '#554b3e',
+  800: '#40382d',
+  900: '#2c271f',
+  950: '#17130e',
 } as const;
 
 export type TaupeScale = typeof taupe;
