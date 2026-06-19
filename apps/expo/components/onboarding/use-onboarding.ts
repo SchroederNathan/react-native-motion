@@ -24,6 +24,8 @@ export interface UseOnboardingResult {
   isLoading: boolean;
   /** Persist completion and flip the flag. */
   complete: () => Promise<void>;
+  /** Clear the persisted flag — for testing the onboarding flow again. */
+  reset: () => Promise<void>;
 }
 
 export function useOnboarding(): UseOnboardingResult {
@@ -46,9 +48,16 @@ export function useOnboarding(): UseOnboardingResult {
     await AsyncStorage.setItem(KEY, 'true');
   }, []);
 
+  const reset = useCallback(async () => {
+    cached = false;
+    setHasOnboarded(false);
+    await AsyncStorage.removeItem(KEY);
+  }, []);
+
   return {
     hasOnboarded: hasOnboarded ?? false,
     isLoading: hasOnboarded === undefined,
     complete,
+    reset,
   };
 }

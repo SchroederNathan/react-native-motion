@@ -65,7 +65,7 @@ export function Button({ label, variant = 'primary', disabled, ...props }: Butto
         style={{
           color: isPrimary ? colors.background : colors.text,
           fontFamily: theme.fonts.semibold,
-          fontSize: tokens.fontSize.title,
+          fontSize: tokens.fontSize.body,
         }}
       >
         {label}

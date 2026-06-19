@@ -1,3 +1,5 @@
+import { Button } from '@/components/button';
+import { coreTheme, ThemeProvider, useTheme } from '@/theme';
 import { router } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useRef, useState } from 'react';
@@ -14,11 +16,9 @@ import Animated, {
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { coreTheme, ThemeProvider, useTheme } from '@/theme';
-import { Button } from '@/components/button';
 import { OnboardingDots } from './onboarding-dots';
-import { StaggeredText } from './staggered-text';
 import { stages } from './stages';
+import { StaggeredText } from './staggered-text';
 import { useOnboarding } from './use-onboarding';
 
 const TITLE_HEIGHT = 92;
@@ -113,7 +113,7 @@ function OnboardingContent() {
                 itemIndex={i}
                 align="left"
                 color={colors.text}
-                fontFamily={theme.fonts.medium}
+                fontFamily={theme.fonts.semibold}
                 fontSize={tokens.fontSize.largeTitle}
               />
             </View>
@@ -124,7 +124,7 @@ function OnboardingContent() {
           <OnboardingDots count={stages.length} activeIndex={activeIndex} />
         </View>
 
-        <Button onPress={onNext} label={isLast ? 'Get Started' : 'Continue'} />
+        <Button onPress={onNext} label={'Continue'} />
       </View>
     </View>
   );
