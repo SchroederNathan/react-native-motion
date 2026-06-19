@@ -88,8 +88,8 @@ function OnboardingContent() {
           >
             <LottieView
               source={item.lottie}
-              autoPlay
-              loop
+              loop={false}
+
               style={{ width: lottieSize, height: lottieSize }}
             />
           </View>
