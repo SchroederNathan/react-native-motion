@@ -1,4 +1,5 @@
 import { Button } from '@/components/button';
+import { Icon } from '@/components/icon';
 import { coreTheme, ThemeProvider, useTheme } from '@/theme';
 import { router } from 'expo-router';
 import LottieView from 'lottie-react-native';
@@ -7,7 +8,9 @@ import {
   type FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -53,10 +56,14 @@ function OnboardingContent() {
     setIndex(Math.round(event.nativeEvent.contentOffset.x / width));
   };
 
+  const finish = async () => {
+    await complete();
+    router.replace('/');
+  };
+
   const onNext = async () => {
     if (isLast) {
-      await complete();
-      router.replace('/');
+      await finish();
       return;
     }
     listRef.current?.scrollToIndex({ index: index + 1, animated: true });
@@ -95,6 +102,34 @@ function OnboardingContent() {
         scrollEventThrottle={16}
         bounces={false}
       />
+
+      {/* Skip — top-right, dismisses onboarding straight to the gallery. */}
+      <Pressable
+        onPress={finish}
+        hitSlop={tokens.spacing.md}
+        accessibilityRole="button"
+        accessibilityLabel="Skip onboarding"
+        style={({ pressed }) => [
+          styles.skip,
+          {
+            top: insets.top + tokens.spacing.sm,
+            right: tokens.spacing.xl,
+            opacity: pressed ? 0.5 : 1,
+          },
+        ]}
+      >
+        <Text
+          style={{
+            color: colors.text,
+            fontFamily: theme.fonts.semibold,
+            fontSize: tokens.fontSize.body,
+            paddingBottom: 2,
+          }}
+        >
+          Skip
+        </Text>
+        <Icon name="chevron-right" size={24} color={colors.text} />
+      </Pressable>
 
       <View
         pointerEvents="box-none"
@@ -140,6 +175,11 @@ export function OnboardingFlow() {
 }
 
 const styles = StyleSheet.create({
+  skip: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   bottom: {
     position: 'absolute',
     left: 0,

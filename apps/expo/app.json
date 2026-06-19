@@ -55,6 +55,16 @@
             "image": "./assets/icons/splash-icon-light.png"
           }
         }
+      ],
+      [
+        "react-native-nano-icons",
+        {
+          "iconSets": [
+            {
+              "inputDir": "./assets/icons/svg"
+            }
+          ]
+        }
       ]
     ],
     "extra": {
