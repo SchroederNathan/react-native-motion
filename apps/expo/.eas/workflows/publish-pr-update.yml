@@ -6,7 +6,8 @@ on:
 
 jobs:
   publish_update:
-    name: Publish update
+    name: Publish update to development channel
     type: update
     params:
-      branch: ${{ github.ref_name || 'pr-preview' }}
+      channel: development
+      message: ${{ github.sha }}
