@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { BlurredTextMorphScreen } from './blurred-text-morph';
 import { GalleryCarouselScreen } from './gallery-carousel';
 
 /**
@@ -7,5 +8,6 @@ import { GalleryCarouselScreen } from './gallery-carousel';
  * screen component, then register it here. No route changes required.
  */
 export const animationScreens: Record<string, ComponentType> = {
+  'blurred-text-morph': BlurredTextMorphScreen,
   'gallery-carousel': GalleryCarouselScreen,
 };

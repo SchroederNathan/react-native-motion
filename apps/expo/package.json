@@ -6,6 +6,7 @@
     "@expo-google-fonts/manrope": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@shopify/flash-list": "2.0.2",
+    "@shopify/react-native-skia": "2.6.2",
     "expo": "~56.0.11",
     "expo-camera": "~56.0.8",
     "expo-constants": "~56.0.18",

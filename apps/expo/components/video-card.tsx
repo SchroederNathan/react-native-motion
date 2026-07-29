@@ -20,7 +20,9 @@ interface VideoCardProps {
 export function VideoCard({ animation, isActive }: VideoCardProps) {
   const { colors, tokens, theme } = useTheme();
 
-  const player = useVideoPlayer(animation.video, (p) => {
+  const hasVideo = animation.video != null;
+
+  const player = useVideoPlayer(animation.video ?? null, (p) => {
     p.loop = true;
     p.muted = true;
   });
@@ -35,9 +37,10 @@ export function VideoCard({ animation, isActive }: VideoCardProps) {
   const videoStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   useEffect(() => {
+    if (!hasVideo) return;
     if (isActive) player.play();
     else player.pause();
-  }, [isActive, player]);
+  }, [hasVideo, isActive, player]);
 
   return (
     <Animated.View entering={FadeIn.duration(400)} style={{ gap: tokens.spacing.md }}>
@@ -58,14 +61,30 @@ export function VideoCard({ animation, isActive }: VideoCardProps) {
             backgroundColor: colors.border,
           }}
         >
-          <Animated.View style={[StyleSheet.absoluteFill, videoStyle]}>
-            <VideoView
-              player={player}
-              style={StyleSheet.absoluteFill}
-              nativeControls={false}
-              contentFit="cover"
-            />
-          </Animated.View>
+          {hasVideo ? (
+            <Animated.View style={[StyleSheet.absoluteFill, videoStyle]}>
+              <VideoView
+                player={player}
+                style={StyleSheet.absoluteFill}
+                nativeControls={false}
+                contentFit="cover"
+              />
+            </Animated.View>
+          ) : (
+            /* Demo is built but not recorded yet — hold the square so the list
+               layout is identical once the .mp4 lands. */
+            <View style={[StyleSheet.absoluteFill, styles.placeholder]}>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontFamily: theme.fonts.medium,
+                  fontSize: tokens.fontSize.caption,
+                }}
+              >
+                Preview coming soon
+              </Text>
+            </View>
+          )}
           {/* Subtle inset hairline on top of the media. */}
           <View
             pointerEvents="none"
@@ -104,3 +123,7 @@ export function VideoCard({ animation, isActive }: VideoCardProps) {
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  placeholder: { alignItems: 'center', justifyContent: 'center' },
+});

@@ -12,10 +12,24 @@ export interface Animation {
   slug: string;
   description: string;
   tags: string[];
-  video: VideoSource;
+  /**
+   * Bundled preview. Omit while a demo is built but not yet recorded — the card
+   * then shows a placeholder instead of a player. `require()` of a missing file
+   * fails the bundle, so leave this off until the .mp4 is actually in place.
+   */
+  video?: VideoSource;
 }
 
 export const animations: Animation[] = [
+  {
+    title: 'Blurred Text Morph',
+    slug: 'blurred-text-morph',
+    description:
+      'Character-diffing text swap drawn through Skia. Shared letters glide to their new position while the rest blur out and blur in, one after another.',
+    tags: ['text', 'morph', 'skia', 'blur', 'stagger', 'spring', 'typography'],
+    // TODO: add assets/videos/blurred-text-morph.mp4, then set
+    // video: require('../assets/videos/blurred-text-morph.mp4'),
+  },
   {
     title: 'Gallery Stack Carousel',
     slug: 'gallery-carousel',
