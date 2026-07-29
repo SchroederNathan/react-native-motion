@@ -17,6 +17,7 @@ import {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 
 /**
  * A character-diffing text morph rendered through Skia so each glyph can carry a
@@ -28,6 +29,10 @@ import {
  * Skia needs the font *file*, not a registered family name, so the source is a
  * required asset module. `@expo-google-fonts/*` packages already export exactly
  * that, which is why no font file has to be bundled.
+ *
+ * Every glyph is a retargetable state machine rather than a one-shot animation.
+ * That is what makes rapid text changes safe: a glyph caught mid-exit that
+ * reappears is redirected back in, instead of being stranded at opacity 0.
  */
 
 const STAGGER_MS = 25; // per-character delay
@@ -41,7 +46,6 @@ const MOVE_DURATION = 260;
 const EXIT_DURATION = 240;
 const GLIDE_DELAY_MS = 140; // persistent chars wait before sliding to their new spot
 const GLIDE_DURATION = 320;
-const CLEANUP_GRACE_MS = 40; // small buffer before an exited cell is dropped
 
 /**
  * Fraction of the font size from the baseline to the visual centre of a
@@ -73,7 +77,13 @@ interface Cell {
 }
 
 interface CharGlyphProps {
-  cell: Cell;
+  /** Identity of this glyph, reported back when its exit finishes. */
+  cellKey: string;
+  char: string;
+  x: number;
+  glyphWidth: number;
+  charIndex: number;
+  isExiting: boolean;
   font: SkFont;
   color: string;
   fontSize: number;
@@ -83,11 +93,18 @@ interface CharGlyphProps {
   onExited: (key: string) => void;
 }
 
-// Memoized so removing one exited glyph (a setCells that keeps every other
-// cell's reference) doesn't re-render the whole string — only cells whose props
-// actually changed (e.g. a new x on a text swap, which drives the glide) rerun.
+/**
+ * Props are primitives rather than a `cell` object, so `memo` can actually bail
+ * out. A glyph whose position, order and phase are unchanged does no React work
+ * when a *different* glyph in the string changes.
+ */
 const CharGlyph = memo(function CharGlyph({
-  cell,
+  cellKey,
+  char,
+  x,
+  glyphWidth,
+  charIndex,
+  isExiting,
   font,
   color,
   fontSize,
@@ -96,65 +113,89 @@ const CharGlyph = memo(function CharGlyph({
   blurMax,
   onExited,
 }: CharGlyphProps) {
-  // gx = glide X (animates between layout positions); tx/ty = enter/exit offset.
-  const gx = useSharedValue(cell.x);
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(ENTER_RISE);
-  const sc = useSharedValue(SHRINK);
-  const op = useSharedValue(0);
-  const bl = useSharedValue(blurMax);
+  // Four shared values, of which only three are ever animated:
+  //   gx     — layout position, animated on its own so a glide can run while the
+  //            glyph is entering or leaving
+  //   motion — spring, drives translate + scale
+  //   fade   — timing, drives opacity + blur
+  //   dir    — +1 entering, -1 leaving. Set, never animated, so it costs nothing
+  //            to step; it only flips the sign of the offsets below.
+  const gx = useSharedValue(x);
+  const motion = useSharedValue(0);
+  const fade = useSharedValue(0);
+  const dir = useSharedValue(1);
 
-  // Enter: on mount, cascade from below/blurred/faded/small into place.
-  useEffect(() => {
-    const delay = ENTER_DELAY_MS + cell.index * staggerMs;
-    ty.set(withDelay(delay, withSpring(0)));
-    sc.set(withDelay(delay, withSpring(1)));
-    op.set(withDelay(delay, withTiming(1, { duration: MOVE_DURATION })));
-    bl.set(withDelay(delay, withTiming(0, { duration: MOVE_DURATION })));
-  }, []);
-
-  // Glide: persistent characters slide (after a short wait) to their new x.
+  // Glide: slide (after a short wait) to a new layout position.
   const isFirstLayout = useRef(true);
   useEffect(() => {
     if (isFirstLayout.current) {
       isFirstLayout.current = false;
       return;
     }
-    gx.set(
-      withDelay(GLIDE_DELAY_MS, withTiming(cell.x, { duration: GLIDE_DURATION })),
-    );
-  }, [cell.x]);
+    gx.set(withDelay(GLIDE_DELAY_MS, withTiming(x, { duration: GLIDE_DURATION })));
+  }, [x]);
 
-  // Exit: continue up + right, shrink, blur and fade, then drop the cell.
+  // The whole in/out state machine, driven only by an actual phase flip, which
+  // retargets the same shared values instead of starting a parallel animation —
+  // so an interrupted glyph always ends up consistent with its current phase.
+  //
+  // The guard matters for cost, not just correctness: a surviving glyph's
+  // `charIndex` changes on almost every swap (letters move), and without it that
+  // would restart the enter animation of every persisting glyph to the value it
+  // already holds. Those glyphs should only run their glide.
+  const appliedPhase = useRef<'present' | 'exit' | null>(null);
   useEffect(() => {
-    if (cell.phase !== 'exit') return;
-    const delay = cell.index * staggerMs;
-    ty.set(withDelay(delay, withTiming(-EXIT_UP, { duration: EXIT_DURATION })));
-    tx.set(withDelay(delay, withTiming(EXIT_RIGHT, { duration: EXIT_DURATION })));
-    sc.set(withDelay(delay, withTiming(SHRINK, { duration: EXIT_DURATION })));
-    bl.set(withDelay(delay, withTiming(blurMax, { duration: EXIT_DURATION })));
-    op.set(withDelay(delay, withTiming(0, { duration: EXIT_DURATION })));
+    const phase = isExiting ? 'exit' : 'present';
+    if (appliedPhase.current === phase) return;
+    appliedPhase.current = phase;
 
-    const timer = setTimeout(
-      () => onExited(cell.key),
-      delay + EXIT_DURATION + CLEANUP_GRACE_MS,
+    if (!isExiting) {
+      dir.set(1);
+      const delay = ENTER_DELAY_MS + charIndex * staggerMs;
+      motion.set(withDelay(delay, withSpring(1)));
+      fade.set(withDelay(delay, withTiming(1, { duration: MOVE_DURATION })));
+      return;
+    }
+
+    dir.set(-1);
+    const delay = charIndex * staggerMs;
+    motion.set(withDelay(delay, withTiming(0, { duration: EXIT_DURATION })));
+    fade.set(
+      withDelay(
+        delay,
+        // Removal rides the animation's own completion instead of a setTimeout.
+        // A timer would keep firing after the glyph came back and would delete a
+        // visible letter; this cannot, and it drops one timer per glyph.
+        withTiming(0, { duration: EXIT_DURATION }, (finished) => {
+          if (finished) scheduleOnRN(onExited, cellKey);
+        }),
+      ),
     );
-    return () => clearTimeout(timer);
-  }, [cell.phase]);
+  }, [isExiting, charIndex, staggerMs, cellKey, onExited]);
 
-  const transform = useDerivedValue(() => [
-    { translateX: gx.get() + tx.get() },
-    { translateY: baselineY + ty.get() },
-    { scale: sc.get() },
-  ]);
+  const transform = useDerivedValue(() => {
+    const settled = motion.get();
+    const away = 1 - settled;
+    const leaving = dir.get() < 0;
+    return [
+      { translateX: gx.get() + (leaving ? EXIT_RIGHT * away : 0) },
+      { translateY: baselineY + (leaving ? -EXIT_UP : ENTER_RISE) * away },
+      { scale: SHRINK + (1 - SHRINK) * settled },
+    ];
+  });
+
+  const blur = useDerivedValue(() => blurMax * (1 - fade.get()));
 
   // Scale around the glyph's centre rather than the baseline origin.
-  const origin = { x: cell.width / 2, y: -fontSize * CENTER_RATIO };
+  const origin = useMemo(
+    () => ({ x: glyphWidth / 2, y: -fontSize * CENTER_RATIO }),
+    [glyphWidth, fontSize],
+  );
 
   return (
-    <Group transform={transform} origin={origin} opacity={op}>
-      <SkiaText x={0} y={0} text={cell.char} font={font} color={color} />
-      <BlurMask blur={bl} style="normal" />
+    <Group transform={transform} origin={origin} opacity={fade}>
+      <SkiaText x={0} y={0} text={char} font={font} color={color} />
+      <BlurMask blur={blur} style="normal" />
     </Group>
   );
 });
@@ -175,18 +216,18 @@ export interface MorphingTextProps {
    */
   fontSize?: number;
   /**
-   * Every string this canvas will ever show. The size is fitted to the widest of
-   * them once, so the type does not resize as the text changes.
-   * @default [text]
-   */
-  fitTexts?: readonly string[];
-  /**
    * Font *file* for Skia — a required asset module, not a family name.
    * @default Manrope_600SemiBold
    */
   fontSource?: DataSourceParam;
   /** Family name used only by the pre-load fallback `<Text>`. */
   fallbackFontFamily?: string;
+  /**
+   * Every string this canvas will ever show. The size is fitted to the widest of
+   * them once, so the type does not resize as the text changes.
+   * @default [text]
+   */
+  fitTexts?: readonly string[];
   /** Per-character delay. @default 25 */
   staggerMs?: number;
   /** Peak Gaussian blur in px. @default 6 */
@@ -223,7 +264,6 @@ export function MorphingText({
   const font = useFont(fontSource, fittedSize);
   const baselineY = height / 2 + fittedSize * CENTER_RATIO;
 
-  const seenRef = useRef<Map<string, Cell>>(new Map());
   const [cells, setCells] = useState<Cell[]>([]);
 
   useEffect(() => {
@@ -235,43 +275,47 @@ export function MorphingText({
     const advances = font.getGlyphWidths(font.getGlyphIDs(text));
     const total = advances.reduce((sum, w) => sum + w, 0);
     // Centre the string within the canvas.
-    const originX = (width - total) / 2;
+    let cursor = (width - total) / 2;
 
-    let cursor = originX;
-    const present: Cell[] = keyed.map((k, index) => {
+    const nextByKey = new Map<string, Cell>();
+    keyed.forEach((k, index) => {
       const w = advances[index] ?? 0;
-      const cell: Cell = {
+      nextByKey.set(k.key, {
         key: k.key,
         char: k.char,
         x: cursor,
         width: w,
         index,
         phase: 'present',
-      };
+      });
       cursor += w;
-      return cell;
     });
-
-    const presentKeys = new Set(present.map((c) => c.key));
-    const exiting: Cell[] = [];
-    seenRef.current.forEach((cell, key) => {
-      if (!presentKeys.has(key)) exiting.push({ ...cell, phase: 'exit' });
-    });
-
-    const nextSeen = new Map<string, Cell>();
-    present.forEach((c) => nextSeen.set(c.key, c));
-    seenRef.current = nextSeen;
 
     // Reconciling the previous glyph set against the new text is a stateful
     // transition (persist / enter / exit animations keyed off the prior set),
     // not a pure render derivation — so state is set from the effect by design.
-    setCells([...present, ...exiting]);
+    setCells((previous) => {
+      const merged: Cell[] = [...nextByKey.values()];
+      for (const old of previous) {
+        if (nextByKey.has(old.key)) continue;
+        // Already leaving: keep the *same object* so `memo` bails out and its
+        // exit animation is never restarted. Carrying these forward is what
+        // lets a glyph finish leaving across several rapid text changes.
+        merged.push(old.phase === 'exit' ? old : { ...old, phase: 'exit' });
+      }
+      return merged;
+    });
   }, [text, font, width]);
 
-  const removeCell = useCallback(
-    (key: string) => setCells((prev) => prev.filter((c) => c.key !== key)),
-    [],
-  );
+  const removeCell = useCallback((key: string) => {
+    setCells((previous) => {
+      const cell = previous.find((c) => c.key === key);
+      // The glyph may have re-entered while its exit was finishing. Dropping it
+      // then would delete a letter that is currently visible.
+      if (!cell || cell.phase !== 'exit') return previous;
+      return previous.filter((c) => c.key !== key);
+    });
+  }, []);
 
   // Until the Skia font loads, fall back to plain text so the copy still shows.
   if (!font) {
@@ -292,7 +336,12 @@ export function MorphingText({
       {cells.map((cell) => (
         <CharGlyph
           key={cell.key}
-          cell={cell}
+          cellKey={cell.key}
+          char={cell.char}
+          x={cell.x}
+          glyphWidth={cell.width}
+          charIndex={cell.index}
+          isExiting={cell.phase === 'exit'}
           font={font}
           color={color}
           fontSize={fittedSize}

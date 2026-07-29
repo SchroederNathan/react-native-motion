@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.schroedernathan.rnmotion",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CADisableMinimumFrameDurationOnPhone": true
       }
     },
     "android": {
