@@ -1,0 +1,424 @@
+export const meta = {
+  title: 'Blurred Text Morph',
+  slug: 'blurred-text-morph',
+  description: 'Character-diffing text swap drawn through Skia. Shared letters glide to their new position while the rest blur out and blur in, one after another.',
+  video: '/videos/blurred-text-morph.mp4',
+  tags: ['text', 'morph', 'skia', 'blur', 'stagger', 'spring', 'typography'],
+}
+
+## Overview
+
+A **character-diffing text swap**. When the string changes, letters the two phrases share keep their identity and **glide** to their new position; the rest **blur out and blur in**, staggered left to right.
+
+Every glyph is drawn as its own Skia `Group` so it can carry a real Gaussian blur. `Animated.Text` cannot do that — this is the reason to reach for Skia here rather than animating native text views.
+
+- **Identity by occurrence**: each character is keyed `` `${char}#${nthOccurrence}` ``, so the second `e` in a phrase reconciles to the same glyph across a swap
+- **Layout from glyph advances**: positions come from `font.getGlyphWidths(font.getGlyphIDs(text))`, not measured text bounds
+- **Interruption-safe**: each glyph is a retargetable state machine, so tapping faster than the animation completes never strands a letter
+- **Auto-fitting type**: the size is fitted once to the widest phrase, so the type does not resize as the text changes
+
+<Installer packages={['@shopify/react-native-skia', 'react-native-reanimated', 'react-native-worklets']} />
+
+<CodePreviewer>
+
+```tsx title="App.tsx"
+import { useCallback, useState } from 'react'
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { MorphingText } from './MorphingText'
+
+// Any font works — Skia needs the file, so point this at whatever you ship.
+// A local file, or an @expo-google-fonts/* export (those are already require()'d
+// .ttf modules), or any other required asset.
+const FONT = require('./YourFont.otf')
+
+// Unrelated phrases, so each swap replaces most of the string rather than
+// rearranging the same words. The letters they happen to share still survive
+// and glide, which is what gives the eye something to follow.
+const PHRASES = [
+  'buttery smooth',
+  'gesture driven',
+  'sixty frames',
+  'feels native',
+] as const
+
+export default function App() {
+  const { width } = useWindowDimensions()
+  const [index, setIndex] = useState(0)
+  const next = useCallback(() => setIndex((i) => (i + 1) % PHRASES.length), [])
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.headline}>
+        <MorphingText
+          text={PHRASES[index]}
+          fitTexts={PHRASES}
+          fontSource={FONT}
+          width={width - 48}
+          height={84}
+          fontSize={52}
+          color="#17130e"
+        />
+      </View>
+
+      <Text style={styles.caption}>
+        Letters the two phrases share glide to their new position. The rest blur
+        out and blur in, one after another.
+      </Text>
+
+      <Pressable style={styles.button} onPress={next}>
+        <Text style={styles.buttonLabel}>Next phrase</Text>
+      </Pressable>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f5f3f0',
+    paddingHorizontal: 24,
+    paddingTop: 96,
+    paddingBottom: 48,
+  },
+  headline: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  caption: {
+    color: '#867865',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  button: {
+    height: 56,
+    borderRadius: 28,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2c271f',
+  },
+  buttonLabel: { color: '#f5f3f0', fontSize: 16, fontWeight: '600' },
+})
+```
+
+```tsx title="MorphingText.tsx"
+import {
+  BlurMask,
+  Canvas,
+  Group,
+  Text as SkiaText,
+  useFont,
+  type DataSourceParam,
+  type SkFont,
+} from '@shopify/react-native-skia'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Text, View } from 'react-native'
+import {
+  useDerivedValue,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
+
+const STAGGER_MS = 25          // per-character delay
+const ENTER_DELAY_MS = 120     // lead so exiting letters clear before new ones arrive
+const ENTER_RISE = 14          // px the incoming char rises from
+const EXIT_UP = 12             // px the outgoing char translates up
+const EXIT_RIGHT = 8           // px the outgoing char translates right
+const SHRINK = 0.7             // scale while entering / exiting
+const BLUR_MAX = 6             // Gaussian blur (px) at the far end of enter/exit
+const MOVE_DURATION = 260
+const EXIT_DURATION = 240
+const GLIDE_DELAY_MS = 140     // persistent chars wait before sliding
+const GLIDE_DURATION = 320
+
+// Baseline to the visual centre of a line, as a fraction of font size.
+const CENTER_RATIO = 0.34
+
+// Key by value + running occurrence, so the n-th "a" keeps a stable identity.
+function toKeyedChars(text: string): { char: string; key: string }[] {
+  const counts: Record<string, number> = {}
+  return [...text].map((char) => {
+    const n = counts[char] ?? 0
+    counts[char] = n + 1
+    return { char, key: `${char}#${n}` }
+  })
+}
+
+interface Cell {
+  key: string
+  char: string
+  x: number
+  width: number
+  index: number
+  phase: 'present' | 'exit'
+}
+
+// Props are primitives rather than a `cell` object, so memo can actually bail
+// out: a glyph whose position, order and phase are unchanged does no work when a
+// different glyph in the string changes.
+const CharGlyph = memo(function CharGlyph({
+  cellKey,
+  char,
+  x,
+  glyphWidth,
+  charIndex,
+  isExiting,
+  font,
+  color,
+  fontSize,
+  baselineY,
+  staggerMs,
+  blurMax,
+  onExited,
+}: {
+  cellKey: string
+  char: string
+  x: number
+  glyphWidth: number
+  charIndex: number
+  isExiting: boolean
+  font: SkFont
+  color: string
+  fontSize: number
+  baselineY: number
+  staggerMs: number
+  blurMax: number
+  onExited: (key: string) => void
+}) {
+  // Only three of these are ever animated. `dir` is set, never animated, so it
+  // costs nothing to step — it just flips the sign of the offsets below.
+  const gx = useSharedValue(x)      // layout position (glides independently)
+  const motion = useSharedValue(0)  // spring: translate + scale
+  const fade = useSharedValue(0)    // timing: opacity + blur
+  const dir = useSharedValue(1)     // +1 entering, -1 leaving
+
+  // Glide to a new layout position.
+  const isFirstLayout = useRef(true)
+  useEffect(() => {
+    if (isFirstLayout.current) {
+      isFirstLayout.current = false
+      return
+    }
+    gx.set(withDelay(GLIDE_DELAY_MS, withTiming(x, { duration: GLIDE_DURATION })))
+  }, [x])
+
+  // The in/out state machine, driven only by a real phase flip. The guard is not
+  // cosmetic: a surviving glyph's charIndex changes on almost every swap, and
+  // without it every persisting glyph would restart its enter animation toward a
+  // value it already holds.
+  const appliedPhase = useRef<'present' | 'exit' | null>(null)
+  useEffect(() => {
+    const phase = isExiting ? 'exit' : 'present'
+    if (appliedPhase.current === phase) return
+    appliedPhase.current = phase
+
+    if (!isExiting) {
+      dir.set(1)
+      const delay = ENTER_DELAY_MS + charIndex * staggerMs
+      motion.set(withDelay(delay, withSpring(1)))
+      fade.set(withDelay(delay, withTiming(1, { duration: MOVE_DURATION })))
+      return
+    }
+
+    dir.set(-1)
+    const delay = charIndex * staggerMs
+    motion.set(withDelay(delay, withTiming(0, { duration: EXIT_DURATION })))
+    fade.set(
+      withDelay(
+        delay,
+        // Removal rides the animation's own completion. A setTimeout would keep
+        // firing after the glyph came back and would delete a visible letter.
+        withTiming(0, { duration: EXIT_DURATION }, (finished) => {
+          if (finished) scheduleOnRN(onExited, cellKey)
+        }),
+      ),
+    )
+  }, [isExiting, charIndex, staggerMs, cellKey, onExited])
+
+  const transform = useDerivedValue(() => {
+    const settled = motion.get()
+    const away = 1 - settled
+    const leaving = dir.get() < 0
+    return [
+      { translateX: gx.get() + (leaving ? EXIT_RIGHT * away : 0) },
+      { translateY: baselineY + (leaving ? -EXIT_UP : ENTER_RISE) * away },
+      { scale: SHRINK + (1 - SHRINK) * settled },
+    ]
+  })
+
+  const blur = useDerivedValue(() => blurMax * (1 - fade.get()))
+
+  // Skia's transform origin is the top-left, so scale around the glyph centre.
+  const origin = useMemo(
+    () => ({ x: glyphWidth / 2, y: -fontSize * CENTER_RATIO }),
+    [glyphWidth, fontSize],
+  )
+
+  return (
+    <Group transform={transform} origin={origin} opacity={fade}>
+      <SkiaText x={0} y={0} text={char} font={font} color={color} />
+      <BlurMask blur={blur} style="normal" />
+    </Group>
+  )
+})
+
+export function MorphingText({
+  text,
+  width,
+  height,
+  color,
+  fontSource,
+  fontSize = 32,
+  fitTexts,
+  staggerMs = STAGGER_MS,
+  blurMax = BLUR_MAX,
+}: {
+  text: string
+  width: number
+  height: number
+  color: string
+  /**
+   * The font *file* — a required asset module, not a family name. Skia resolves
+   * type itself and cannot see a family registered with `expo-font`, so use any
+   * font you like, but pass the file.
+   */
+  fontSource: DataSourceParam
+  /** Treated as a maximum — see `fitTexts`. */
+  fontSize?: number
+  /** Every string this canvas will show. Size is fitted to the widest. */
+  fitTexts?: readonly string[]
+  staggerMs?: number
+  blurMax?: number
+}) {
+  // Measure at the requested size, then shrink to fit the widest string. Two font
+  // instances is the cost of an exact fit; a per-character heuristic would either
+  // clip a wide string or leave a narrow one too small.
+  const probeFont = useFont(fontSource, fontSize)
+  const fittedSize = useMemo(() => {
+    if (!probeFont) return fontSize
+    const candidates = fitTexts?.length ? fitTexts : [text]
+    const widest = candidates.reduce((max, candidate) => {
+      const advances = probeFont.getGlyphWidths(probeFont.getGlyphIDs(candidate))
+      return Math.max(max, advances.reduce((sum, w) => sum + w, 0))
+    }, 0)
+    if (widest <= width || widest === 0) return fontSize
+    return Math.floor(fontSize * (width / widest))
+  }, [probeFont, fitTexts, text, width, fontSize])
+
+  const font = useFont(fontSource, fittedSize)
+  const baselineY = height / 2 + fittedSize * CENTER_RATIO
+
+  const [cells, setCells] = useState<Cell[]>([])
+
+  useEffect(() => {
+    if (!font) return
+
+    const keyed = toKeyedChars(text)
+    // True glyph advances, not tight bounds — bounds drop trailing spaces and
+    // side bearings, which throws the spacing off.
+    const advances = font.getGlyphWidths(font.getGlyphIDs(text))
+    const total = advances.reduce((sum, w) => sum + w, 0)
+    let cursor = (width - total) / 2
+
+    const nextByKey = new Map<string, Cell>()
+    keyed.forEach((k, index) => {
+      const w = advances[index] ?? 0
+      nextByKey.set(k.key, {
+        key: k.key,
+        char: k.char,
+        x: cursor,
+        width: w,
+        index,
+        phase: 'present',
+      })
+      cursor += w
+    })
+
+    setCells((previous) => {
+      const merged: Cell[] = [...nextByKey.values()]
+      for (const old of previous) {
+        if (nextByKey.has(old.key)) continue
+        // Already leaving: keep the *same object* so memo bails out and the exit
+        // animation is never restarted. Carrying these forward is what lets a
+        // glyph finish leaving across several rapid text changes.
+        merged.push(old.phase === 'exit' ? old : { ...old, phase: 'exit' })
+      }
+      return merged
+    })
+  }, [text, font, width])
+
+  const removeCell = useCallback((key: string) => {
+    setCells((previous) => {
+      const cell = previous.find((c) => c.key === key)
+      // The glyph may have re-entered while its exit was finishing. Dropping it
+      // then would delete a letter that is currently visible.
+      if (!cell || cell.phase !== 'exit') return previous
+      return previous.filter((c) => c.key !== key)
+    })
+  }, [])
+
+  // Until the Skia font loads, fall back to plain text so the copy still shows.
+  if (!font) {
+    return (
+      <View style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
+        <Text numberOfLines={1} style={{ color, fontSize: fittedSize }}>
+          {text}
+        </Text>
+      </View>
+    )
+  }
+
+  return (
+    <Canvas style={{ width, height }}>
+      {cells.map((cell) => (
+        <CharGlyph
+          key={cell.key}
+          cellKey={cell.key}
+          char={cell.char}
+          x={cell.x}
+          glyphWidth={cell.width}
+          charIndex={cell.index}
+          isExiting={cell.phase === 'exit'}
+          font={font}
+          color={color}
+          fontSize={fittedSize}
+          baselineY={baselineY}
+          staggerMs={staggerMs}
+          blurMax={blurMax}
+          onExited={removeCell}
+        />
+      ))}
+    </Canvas>
+  )
+}
+```
+
+</CodePreviewer>
+
+## Common Pitfalls
+
+- **Never run the enter animation on mount only.** `useEffect(..., [])` is the single biggest trap here. A glyph caught mid-exit that reappears in the next phrase is *reused* by React (same key), so it never remounts — it just sits at `opacity: 0` while still holding its layout slot. The text renders with gaps, and it looks like dropped frames rather than a bug. Drive the animation off a phase flip instead.
+
+- **Do not remove exited glyphs with `setTimeout`.** A pending timer keyed to a glyph will happily fire after that letter has come back and delete something visible. Use the exit animation's own completion callback, and guard the removal: only drop the cell if it is *still* in the exit phase.
+
+- **Carry in-flight exiting glyphs forward, by reference.** When the text changes again mid-exit, rebuild the list so previously-exiting cells survive — and reuse the same object so `memo` bails out and their animation is not restarted. Rebuilding them fresh restarts the exit from the top every keystroke.
+
+- **Guard the phase effect against index-only changes.** A surviving glyph's index changes on almost every swap because letters move. Without a guard, every persisting glyph restarts its enter animation toward the value it already holds — pure wasted animation work on the UI thread.
+
+- **Skia needs the font file, not a family name.** Use whatever typeface you want, but `useFont` takes a required asset module — `require('./YourFont.otf')`. A family name registered with `expo-font` is invisible to Skia, so `fontFamily: 'YourFont'` silently renders nothing. If you would rather not bundle a file, `@expo-google-fonts/*` packages already export a `require`d `.ttf` you can pass straight through.
+
+- **Use glyph advances, not text bounds.** `font.getGlyphWidths(font.getGlyphIDs(text))` gives true advance widths. Tight bounds drop trailing spaces and side bearings, so spacing drifts and centring is off.
+
+- **Advances are indexed per character, so keep strings ASCII.** `[...text]` splits by code point; a multi-codepoint grapheme or emoji desynchronises the two arrays and the layout falls apart. Spaces are fine — they carry a real advance and draw nothing.
+
+- **Character keys are case-sensitive.** `D` and `d` are different glyphs, so a capitalised phrase shares nothing with a lowercase one and everything blurs instead of gliding. Keep the set in one case if you want the glide to read.
+
+- **Skia's transform origin is the top-left, not the centre.** Pass `origin` so each glyph scales around its own middle rather than pivoting off the baseline.
+
+- **Fit the type to the widest phrase, not the current one.** Sizing per string makes the type jump between phrases. Measure every candidate once and pick one size.
+
+- **Use `scheduleOnRN` from `react-native-worklets`**, not the removed `runOnJS`, when calling back into JS from an animation callback.
+
+- **Use `.get()` and `.set()` on shared values** instead of `.value`, for React Compiler compatibility.

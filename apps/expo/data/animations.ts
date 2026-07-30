@@ -27,8 +27,7 @@ export const animations: Animation[] = [
     description:
       'Character-diffing text swap drawn through Skia. Shared letters glide to their new position while the rest blur out and blur in, one after another.',
     tags: ['text', 'morph', 'skia', 'blur', 'stagger', 'spring', 'typography'],
-    // TODO: add assets/videos/blurred-text-morph.mp4, then set
-    // video: require('../assets/videos/blurred-text-morph.mp4'),
+    video: require('../assets/videos/blurred-text-morph.mp4'),
   },
   {
     title: 'Gallery Stack Carousel',
