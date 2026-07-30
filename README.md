@@ -2,6 +2,8 @@
 
 Beautiful animations for React Native and Expo. Built for you or your agent to ship.
 
+> **Status: in development.** This project is still a work in progress. Animations, APIs, and file structure can change without notice.
+
 Every animation lives in this repo and is demoed in two places:
 
 - **The React Native Motion app** (`apps/expo`) — browse and search every animation from the home screen. The demo most in view autoplays on a loop, and tapping it opens the full animation screen.
