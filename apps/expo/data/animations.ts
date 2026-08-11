@@ -22,6 +22,14 @@ export interface Animation {
 
 export const animations: Animation[] = [
   {
+    title: 'Aurora Curtain',
+    slug: 'aurora-curtain',
+    description:
+      'A Skia curtain of violet light over the top of the screen, every constant measured off a real one: irregular rays that lean into their own drift, a calibrated grain, and more of it hidden above the edge than on show. Drag down to draw the rest in.',
+    tags: ['aurora', 'skia', 'shader', 'gesture', 'procedural', 'seamless-loop'],
+    video: require('../assets/videos/aurora.mp4'),
+  },
+  {
     title: 'Blurred Text Morph',
     slug: 'blurred-text-morph',
     description:

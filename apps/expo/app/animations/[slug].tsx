@@ -45,6 +45,7 @@ export default function AnimationDetail() {
   const animation = animations.find((a) => a.slug === slug);
   const title = animation?.title ?? 'Animation';
   const Screen = slug ? animationScreens[slug] : undefined;
+  const isAurora = slug === 'aurora-curtain';
 
   return (
     <>
@@ -53,6 +54,18 @@ export default function AnimationDetail() {
           title,
           headerLargeTitle: false,
           headerBackButtonDisplayMode: 'minimal',
+          // The curtain is anchored to the top of the screen, so anything drawn
+          // up there sits on the light. Keep the back button and drop the rest,
+          // and let the canvas run under it.
+          ...(isAurora
+            ? {
+                headerTitle: '',
+                headerTransparent: true,
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: 'transparent' },
+                headerTintColor: '#F4F3FA',
+              }
+            : {}),
         }}
       />
       {Screen ? <Screen /> : <ComingSoon title={title} />}
