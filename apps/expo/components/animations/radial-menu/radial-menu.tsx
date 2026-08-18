@@ -2,10 +2,12 @@ import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
+  Easing,
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -20,11 +22,27 @@ export interface RadialActionDef {
 const BUTTON_RADIUS = 28;
 const DEFAULT_RADIUS = 96;
 const DEFAULT_ANGLE_STEP_DEG = 40;
+const BUTTON_SIZE = BUTTON_RADIUS * 2;
 const BASE_ICON_SIZE = 22;
+// How much the button grows when the finger sits on it (1.0 → 1.4).
+const PROXIMITY_GROW = 0.4;
+const TITLE_MARGIN = 20;
 
+// Reference timings, measured frame-by-frame off the source recording:
+// open ~220ms wash + ~250ms button travel, close is a ~130ms fade in place,
+// focus swaps in ~100ms. Entrances use a strong ease-out.
+export const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+export const MENU_OPEN_MS = 250;
+export const MENU_CLOSE_MS = 130;
+const FOCUS_MS = 100;
+const TITLE_MS = 120;
+
+// Interpolate along the shortest angular path, so e.g. 0° → 310° sweeps
+// -50° instead of the long way through +136°.
 function lerpAngle(a: number, b: number, t: number) {
   'worklet';
-  return a + (b - a) * t;
+  const delta = ((b - a + 540) % 360) - 180;
+  return a + delta * t;
 }
 
 interface RadialButtonModel {
@@ -40,6 +58,7 @@ function RadialButton({
   cursorX,
   cursorY,
   animationProgress,
+  fade,
   hoveredId,
 }: {
   button: RadialButtonModel;
@@ -48,76 +67,152 @@ function RadialButton({
   cursorX: SharedValue<number>;
   cursorY: SharedValue<number>;
   animationProgress: SharedValue<number>;
+  fade: SharedValue<number>;
   hoveredId: SharedValue<string | null>;
 }) {
-  const [iconSize, setIconSize] = useState(BASE_ICON_SIZE);
   const Icon = button.icon;
 
-  // 1 → far from finger, up to 1.4 → finger sitting on the button.
+  // 0 → idle (black glyph on white), 1 → focused (white glyph on black).
+  const focus = useDerivedValue(() =>
+    withTiming(hoveredId.get() === button.id ? 1 : 0, { duration: FOCUS_MS }),
+  );
+
+  // 1 → far from the finger, up to 1 + PROXIMITY_GROW with the finger on it.
   const proximityScale = useDerivedValue(() => {
     const dx = cursorX.get() - button.pos.x;
     const dy = cursorY.get() - button.pos.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const normalized = Math.max(0, Math.min(1, 1 - dist / (BUTTON_RADIUS * 2)));
-    return 1 + normalized * 0.4;
+    const closeness = Math.max(0, Math.min(1, 1 - dist / (BUTTON_RADIUS * 2)));
+    return 1 + PROXIMITY_GROW * closeness;
   });
 
-  // Bridge the proximity scale into React state so the glyph grows with it.
+  // The glyph grows with proximity by RE-RENDERING at the live size — a font
+  // glyph re-laid-out at each integer size stays vector-crisp, where a
+  // transform would rasterize and blur it. Deliberate JS-bridge tradeoff:
+  // it fires only on integer size changes while the finger is near.
+  const [iconSize, setIconSize] = useState(BASE_ICON_SIZE);
+
   useAnimatedReaction(
-    () => Math.round(proximityScale.get() * BASE_ICON_SIZE),
+    () => Math.round(BASE_ICON_SIZE * proximityScale.get()),
     (size, prev) => {
       if (size !== prev) scheduleOnRN(setIconSize, size);
     },
   );
 
+  // The container spawns at the press point and travels its spoke while
+  // growing; its scale ends at exactly 1 so the glyph rests at full
+  // resolution. On close it fades in place (`fade`), it never travels back.
   const animatedButtonStyle = useAnimatedStyle(() => {
     const progress = animationProgress.get();
 
-    const startX = pressX - BUTTON_RADIUS;
-    const startY = pressY - BUTTON_RADIUS;
-    const endX = button.pos.x - BUTTON_RADIUS;
-    const endY = button.pos.y - BUTTON_RADIUS;
-
-    const currentX = startX + (endX - startX) * progress;
-    const currentY = startY + (endY - startY) * progress;
-
-    const proximity = proximityScale.get();
-
-    // Nudge the button along its spoke, away from the finger, when close.
-    const vx = endX - startX;
-    const vy = endY - startY;
-    const vlen = Math.max(1, Math.sqrt(vx * vx + vy * vy));
-    const closeness = Math.max(0, Math.min(1, (proximity - 1) / 0.4));
-    const offset = 32 * closeness * closeness * progress;
-
-    const size = BUTTON_RADIUS * 2 * progress * proximity;
-
     return {
-      left: currentX + (vx / vlen) * offset,
-      top: currentY + (vy / vlen) * offset,
-      opacity: progress,
-      width: size,
-      height: size,
-      borderRadius: size / 2,
+      opacity: progress * fade.get(),
+      transform: [
+        { translateX: (button.pos.x - pressX) * progress },
+        { translateY: (button.pos.y - pressY) * progress },
+        { scale: progress },
+      ],
     };
   });
 
-  const activeIconStyle = useAnimatedStyle(() => ({
-    opacity: hoveredId.get() === button.id ? 1 : 0,
+  // The discs grow by animating their real size (childless, absolutely
+  // positioned, so the layout pass is trivial) — the circle re-renders crisp
+  // at every size where a transform would blur its rasterized edge.
+  const discBaseStyle = useAnimatedStyle(() => {
+    const size = BUTTON_SIZE * proximityScale.get();
+    const inset = (BUTTON_SIZE - size) / 2;
+    return { width: size, height: size, left: inset, top: inset };
+  });
+
+  const discFocusedStyle = useAnimatedStyle(() => {
+    const size = BUTTON_SIZE * proximityScale.get();
+    const inset = (BUTTON_SIZE - size) / 2;
+    return {
+      opacity: focus.get(),
+      width: size,
+      height: size,
+      left: inset,
+      top: inset,
+    };
+  });
+
+  const focusedIconStyle = useAnimatedStyle(() => ({
+    opacity: focus.get(),
   }));
 
-  const inactiveIconStyle = useAnimatedStyle(() => ({
-    opacity: hoveredId.get() === button.id ? 0 : 1,
+  const idleIconStyle = useAnimatedStyle(() => ({
+    opacity: 1 - focus.get(),
   }));
 
   return (
-    <Animated.View style={[styles.button, animatedButtonStyle]}>
-      <Animated.View style={[styles.iconLayer, activeIconStyle]}>
+    <Animated.View
+      style={[
+        styles.button,
+        {
+          left: pressX - BUTTON_SIZE / 2,
+          top: pressY - BUTTON_SIZE / 2,
+        },
+        animatedButtonStyle,
+      ]}
+    >
+      {/* Idle: black glyph on the white disc. Focused: the black disc and
+          white glyph crossfade in on top. */}
+      <Animated.View style={[styles.discBase, discBaseStyle]} />
+      <Animated.View style={[styles.discFocused, discFocusedStyle]} />
+      <Animated.View style={[styles.iconLayer, idleIconStyle]}>
         <Icon size={iconSize} color="#000000" />
       </Animated.View>
-      <Animated.View style={[styles.iconLayer, inactiveIconStyle]}>
+      <Animated.View style={[styles.iconLayer, focusedIconStyle]}>
         <Icon size={iconSize} color="#FFFFFF" />
       </Animated.View>
+    </Animated.View>
+  );
+}
+
+/**
+ * Names the focused action in large dark text, anchored to the screen edge
+ * opposite the press. The text only updates when a new action is focused, so
+ * it stays put while fading out.
+ */
+function HoveredTitle({
+  hoveredId,
+  titles,
+  onLeft,
+  y,
+}: {
+  hoveredId: SharedValue<string | null>;
+  titles: Record<string, string>;
+  onLeft: boolean;
+  y: number;
+}) {
+  const [title, setTitle] = useState('');
+
+  useAnimatedReaction(
+    () => hoveredId.get(),
+    (id, prev) => {
+      if (id && id !== prev) scheduleOnRN(setTitle, titles[id] ?? '');
+    },
+  );
+
+  const labelStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(hoveredId.get() !== null ? 1 : 0, {
+      duration: TITLE_MS,
+    }),
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.titleWrap,
+        onLeft ? { left: TITLE_MARGIN } : { right: TITLE_MARGIN },
+        { top: y - 22 },
+        labelStyle,
+      ]}
+    >
+      <Animated.Text style={styles.titleText} numberOfLines={1}>
+        {title}
+      </Animated.Text>
     </Animated.View>
   );
 }
@@ -129,6 +224,7 @@ export function RadialMenu({
   cursorY,
   releaseSignal,
   progress,
+  fade,
   actions,
   onSelect,
   onCancel,
@@ -142,6 +238,8 @@ export function RadialMenu({
   releaseSignal: SharedValue<number>;
   /** Fan-out progress driven by the hook: 0 collapsed, 1 fully open. */
   progress: SharedValue<number>;
+  /** Close fade driven by the hook: buttons fade out in place. */
+  fade: SharedValue<number>;
   actions: RadialActionDef[];
   onSelect: (id: string) => void;
   onCancel: () => void;
@@ -195,6 +293,11 @@ export function RadialMenu({
     [buttons],
   );
 
+  const titles = useMemo(
+    () => Object.fromEntries(actions.map((a) => [a.id, a.title])),
+    [actions],
+  );
+
   // Track the nearest button under the finger; buzz once on each new hover.
   useAnimatedReaction(
     () => ({ x: cursorX.get(), y: cursorY.get() }),
@@ -228,12 +331,14 @@ export function RadialMenu({
     },
   );
 
-  // On release, select the hovered action or cancel. The hook collapses the
-  // fan-out via `progress`.
+  // On release, select the hovered action or cancel. The hook fades the menu
+  // out via `fade`. The signal is reset to 0 on open and only ever
+  // incremented, so a non-zero first-run value is a release that landed while
+  // this menu was still mounting — it must fire, not be skipped.
   useAnimatedReaction(
     () => releaseSignal.get(),
     (value, previous) => {
-      if (previous == null || value === previous) return;
+      if (value === 0 || value === previous) return;
       const hovered = hoveredId.get();
       if (hovered) {
         scheduleOnRN(Haptics.selectionAsync);
@@ -255,9 +360,16 @@ export function RadialMenu({
           cursorX={cursorX}
           cursorY={cursorY}
           animationProgress={progress}
+          fade={fade}
           hoveredId={hoveredId}
         />
       ))}
+      <HoveredTitle
+        hoveredId={hoveredId}
+        titles={titles}
+        onLeft={pressX > width / 2}
+        y={pressY}
+      />
     </View>
   );
 }
@@ -265,10 +377,32 @@ export function RadialMenu({
 const styles = StyleSheet.create({
   button: {
     position: 'absolute',
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  discBase: {
+    position: 'absolute',
+    // Comfortably over half the largest size, so it clamps to a circle at
+    // every animated width/height.
+    borderRadius: BUTTON_SIZE * 2,
     backgroundColor: 'white',
-    boxShadow: '0px 6px 16px -4px rgba(0, 0, 0, 0.45)',
+    boxShadow: '0px 4px 12px -2px rgba(0, 0, 0, 0.25)',
+  },
+  discFocused: {
+    position: 'absolute',
+    borderRadius: BUTTON_SIZE * 2,
+    backgroundColor: '#000000',
   },
   iconLayer: { position: 'absolute' },
+  titleWrap: {
+    position: 'absolute',
+    maxWidth: 260,
+  },
+  titleText: {
+    color: '#111111',
+    fontSize: 32,
+    fontWeight: '700',
+  },
 });

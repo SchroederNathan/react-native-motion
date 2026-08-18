@@ -17,6 +17,8 @@ import { useRadialOverlay } from './use-radial-overlay';
 const CARD_RADIUS = 16;
 const CELL_GAP = 10;
 const CONTAINER_PADDING = 12;
+// The stack header is translucent, so clear it like the other demo screens do.
+const HEADER_CLEARANCE = 48;
 
 /** The visual face of a media card — shared by the live card and its clone. */
 function CardFace({ item }: { item: MediaCardItem }) {
@@ -94,7 +96,7 @@ function RadialMenuContent() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <View
-        style={[styles.header, { paddingTop: insets.top + tokens.spacing.md }]}
+        style={[styles.header, { paddingTop: insets.top + HEADER_CLEARANCE }]}
       >
         <Text
           style={{
