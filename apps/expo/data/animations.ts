@@ -54,6 +54,13 @@ export const animations: Animation[] = [
     video: require('../assets/videos/radial-menu.mp4'),
   },
   {
+    title: 'Stack Toast',
+    slug: 'spring-toast',
+    description:
+      'Stacking bottom toasts: each new one springs up and pushes the rest back a step, smaller behind smaller. The front toast follows the finger — rubber-banding upward, committing on a downward flick — and dismissing it springs the stack forward.',
+    tags: ['toast', 'stack', 'spring', 'gesture', 'swipe-to-dismiss', 'haptics', 'notification'],
+  },
+  {
     title: 'Linear Tab Bar',
     slug: 'linear-tab-bar',
     description:
