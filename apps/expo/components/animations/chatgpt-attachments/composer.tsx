@@ -10,7 +10,9 @@ import {
   type TextInput as TextInputType,
 } from 'react-native';
 import Animated, {
+  Extrapolation,
   FadeOut,
+  interpolate,
   LinearTransition,
   useAnimatedReaction,
   useAnimatedStyle,
@@ -23,15 +25,16 @@ import type { LibraryPhoto } from './use-photo-library';
 
 interface ThumbnailProps {
   photo: LibraryPhoto;
-  /** Held back while the panel is still flying into this slot. */
+  /** Held back while a copy of this photo is still flying into this slot. */
   hidden: boolean;
   onRemove: (id: string) => void;
 }
 
 function Thumbnail({ photo, hidden, onRemove }: ThumbnailProps) {
   return (
-    // No entering animation: the panel is still standing in for this slot, and
-    // the hand-off has to be a straight swap or the photo double-exposes.
+    // No entering animation: the flying copy is still standing in for this
+    // slot, and the hand-off has to be a straight swap or the photo
+    // double-exposes.
     // Leaving is the opposite — the thumbnail fades where it stands while the
     // ones after it close the gap, which is what `layout` is for.
     <Animated.View
@@ -67,8 +70,18 @@ export interface ComposerProps {
    * the strip, and that slot is still opening while it flies.
    */
   strip: SharedValue<number>;
-  /** Id of the attachment the flying panel is still standing in for. */
-  pendingId: string | null;
+  /**
+   * 0 the + is in place → 1 it has cleared the space the panel opens on. On the
+   * menu's own springs — `SPRING.panel` out, `SPRING.panelOut` back — but not
+   * on the menu's clock: it leads the panel in and trails it out, because the
+   * panel opens on top of this glyph and would otherwise hide the whole move.
+   */
+  plusOut: SharedValue<number>;
+  /**
+   * Ids of the attachments the flight is still standing in for. Every photo
+   * picked in one go flies at once, so this is a set and not a single id.
+   */
+  pendingIds: string[];
   onPlusPress: () => void;
   onRemove: (id: string) => void;
   onFocus?: () => void;
@@ -86,10 +99,31 @@ export interface ComposerProps {
  * its bounds, and an `overflow: hidden` on the bar would cut them off.
  */
 export const Composer = forwardRef<TextInputType, ComposerProps>(function Composer(
-  { attachments, strip, pendingId, onPlusPress, onRemove, onFocus },
+  { attachments, strip, plusOut, pendingIds, onPlusPress, onRemove, onFocus },
   ref,
 ) {
   const hasAttachments = attachments.length > 0;
+
+  /**
+   * The + hands its place over to the menu about to grow out of it: right and
+   * out, and back the same way once the menu has gone.
+   *
+   * Only the glyph moves. The hit target stays where it is, so the second tap —
+   * the one that dismisses — lands on the same spot as the first.
+   *
+   * The slide takes the spring raw, overshoot and all, because that overshoot
+   * is the whole character of the move. The fade is clamped, since `withSpring`
+   * settles past 1 and a raw `1 - plusOut` would drive opacity negative.
+   *
+   * It runs to 0.75 rather than to the halfway point so the + is still on its
+   * way out when the panel lands on it, instead of leaving a beat where the
+   * composer holds an empty slot and nothing is moving at all. The last of the
+   * fade happens underneath the panel, which costs nothing to draw.
+   */
+  const plusStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(plusOut.get(), [0, 0.75], [1, 0], Extrapolation.CLAMP),
+    transform: [{ translateX: plusOut.get() * COMPOSER.plusSlide }],
+  }));
 
   /**
    * The strip has to outlive its last attachment. `attachments` empties on the
@@ -140,7 +174,7 @@ export const Composer = forwardRef<TextInputType, ComposerProps>(function Compos
             <Thumbnail
               key={photo.id}
               photo={photo}
-              hidden={photo.id === pendingId}
+              hidden={pendingIds.includes(photo.id)}
               onRemove={onRemove}
             />
           ))}
@@ -155,7 +189,9 @@ export const Composer = forwardRef<TextInputType, ComposerProps>(function Compos
           onPress={onPlusPress}
           style={styles.plus}
         >
-          <Icon name="plus" size={COMPOSER.plusSize} color={COLORS.text} />
+          <Animated.View style={plusStyle}>
+            <Icon name="plus" size={COMPOSER.plusSize} color={COLORS.text} />
+          </Animated.View>
         </Pressable>
 
         <TextInput

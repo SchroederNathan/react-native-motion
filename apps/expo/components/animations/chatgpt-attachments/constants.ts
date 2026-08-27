@@ -65,6 +65,13 @@ export const COMPOSER = {
   /** White circular voice / send button. */
   actionSize: 30,
   plusSize: 20,
+  /**
+   * How far right the + glyph slides to clear the space the menu grows out of.
+   * Not a measurement — the reference leaves the + where it is — but the panel
+   * opens on that exact spot, and something has to give it up. About the
+   * glyph's own width reads as moving aside rather than drifting.
+   */
+  plusSlide: 16,
   micSize: 20,
   fieldSize: 17,
 } as const;
@@ -264,4 +271,25 @@ export const DURATION = {
   blur: 160,
   /** "All Photos" ⇄ "Add N photos". */
   pill: 160,
+  /**
+   * How long the + glyph gets to itself before the panel arrives.
+   *
+   * The panel opens as the circle around that glyph and is 14pt wider than it,
+   * so there is no starting size at which the two do not overlap — the panel
+   * has to be absent for this stretch, not small. Long enough to read the +
+   * move, short enough that the tap still answers at once: it answers with the
+   * + rather than with the menu.
+   */
+  plusLead: 30,
 } as const;
+
+/**
+ * Linear interpolation, on the UI thread. Lives here rather than in one of the
+ * views because the panel and the photos flying out of it have to agree on how
+ * a rect is walked from one frame to another — they are moving apart from the
+ * same edges.
+ */
+export function mix(t: number, a: number, b: number) {
+  'worklet';
+  return a + (b - a) * t;
+}

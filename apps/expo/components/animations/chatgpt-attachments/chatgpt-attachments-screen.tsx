@@ -20,12 +20,14 @@ import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withDelay,
   withSequence,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
+import { AttachmentFlight, type Flight } from './attachment-flight';
 import { AttachmentMenu, type MenuAction } from './attachment-menu';
 import { AttachmentPanel } from './attachment-panel';
 import { Composer } from './composer';
@@ -35,12 +37,13 @@ import {
   DURATION,
   EASE_FADE,
   EASE_OUT,
+  GRID,
   GUTTER,
   MENU,
   MENU_HEIGHT,
   SPRING,
 } from './constants';
-import { PhotoGrid, PhotoGridBar } from './photo-grid';
+import { PhotoGrid, PhotoGridBar, type PhotoGridHandle } from './photo-grid';
 import { chatgptAttachmentsTheme } from './theme';
 import { usePhotoLibrary, type LibraryPhoto } from './use-photo-library';
 
@@ -55,32 +58,39 @@ function ChatGptAttachmentsContent() {
   const keyboard = useReanimatedKeyboardAnimation();
   const { photos, status } = usePhotoLibrary();
   const inputRef = useRef<TextInput>(null);
+  const gridRef = useRef<PhotoGridHandle>(null);
+  /** Pending panel mount, held back while the + gets out of the way. */
+  const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mode, setMode] = useState<Mode>('closed');
   const [selected, setSelected] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<LibraryPhoto[]>([]);
-  const [flying, setFlying] = useState<LibraryPhoto | null>(null);
+  /** The photos currently crossing from the grid to the composer. */
+  const [flights, setFlights] = useState<Flight[]>([]);
   /**
-   * True for the length of a dismiss. The sheet is still mounted and still
-   * collapsing, but its material is already on its way out — see `glass` below.
-   * The flight into the composer does not need this: it drops the material
-   * outright rather than fading it.
+   * True for the length of a close, whichever way it was asked for. The sheet
+   * is still mounted and still collapsing, but its material is already on its
+   * way out — see `glass` below.
    */
   const [closing, setClosing] = useState(false);
-  const [attachSlot, setAttachSlot] = useState(0);
   const [settledKeyboard, setSettledKeyboard] = useState(0);
 
   const open = useSharedValue(0);
+  /**
+   * 0 the + is in place → 1 it has cleared the space the panel opens on. Its
+   * own value rather than a read of `open`, because it deliberately runs out of
+   * step with the panel: it leads on the way in and trails on the way out.
+   */
+  const plusOut = useSharedValue(0);
   const morph = useSharedValue(0);
   const attach = useSharedValue(0);
   const menuOpacity = useSharedValue(1);
   const gridOpacity = useSharedValue(0);
-  const flyOpacity = useSharedValue(0);
   const blur = useSharedValue(0);
   /**
    * 0 no attachment strip → 1 strip open. Lives up here because two views need
-   * it: the composer, which grows around it, and the panel, which has to know
-   * where the slot it is flying into currently is.
+   * it: the composer, which grows around it, and the photos flying into it,
+   * which have to know where the slot they are aiming at currently is.
    */
   const strip = useSharedValue(0);
 
@@ -136,6 +146,14 @@ function ChatGptAttachmentsContent() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Drops a lead-in still in flight if the screen goes away mid-open.
+  useEffect(
+    () => () => {
+      if (leadTimer.current !== null) clearTimeout(leadTimer.current);
+    },
+    [],
+  );
+
   const settledBottom = height - Math.max(settledKeyboard, insets.bottom) - COMPOSER.keyboardGap;
   const panelTop = settledBottom - COMPOSER.rowHeight / 2 + MENU.centerOffset - MENU_HEIGHT / 2;
   // The sheet keeps the composer's gutter rather than going full bleed, the way
@@ -167,24 +185,40 @@ function ChatGptAttachmentsContent() {
     );
   }, [blur]);
 
+  /** Drops a queued lead-in, so a tap during it never lets the panel arrive. */
+  const clearLead = useCallback(() => {
+    if (leadTimer.current === null) return;
+    clearTimeout(leadTimer.current);
+    leadTimer.current = null;
+  }, []);
+
   const openMenu = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setMode('menu');
+    // The + goes first and alone. The panel opens as the circle around that
+    // glyph and is wider than it, so there is no size at which it can start
+    // without covering the very thing that is trying to move out from under
+    // it — it has to stay unmounted for the length of the lead.
+    plusOut.set(withSpring(1, SPRING.panel));
     morph.set(0);
     attach.set(0);
-    flyOpacity.set(0);
     gridOpacity.set(0);
     menuOpacity.set(1);
     blur.set(1);
-    // A spring rather than a curve because the panel starts as the circle
-    // around the + button: an ease-out is already a fifth of the way out by the
-    // second frame and the circle is never seen, where a spring holds small
-    // long enough to read it.
-    open.set(withSpring(1, SPRING.panel));
-    blur.set(withTiming(0, { duration: DURATION.blur, easing: EASE_FADE }));
-  }, [attach, blur, flyOpacity, gridOpacity, menuOpacity, morph, open]);
+    clearLead();
+    leadTimer.current = setTimeout(() => {
+      leadTimer.current = null;
+      setMode('menu');
+      // A spring rather than a curve because the panel starts as the circle the
+      // + just left: an ease-out is already a fifth of the way out by the second
+      // frame and the circle is never seen, where a spring holds small long
+      // enough to read it.
+      open.set(withSpring(1, SPRING.panel));
+      blur.set(withTiming(0, { duration: DURATION.blur, easing: EASE_FADE }));
+    }, DURATION.plusLead);
+  }, [attach, blur, clearLead, gridOpacity, menuOpacity, morph, open, plusOut]);
 
   const dismiss = useCallback(() => {
+    clearLead();
     setSelected([]);
     // Hands the material to its own native transition for the way out, so it
     // fades over the same stretch the panel takes to collapse into the + button
@@ -204,7 +238,11 @@ function ChatGptAttachmentsContent() {
         if (finished) scheduleOnRN(closeSheet);
       }),
     );
-  }, [blur, closeSheet, gridOpacity, menuOpacity, morph, open]);
+    // The same order read backwards: the panel goes, then the + comes back into
+    // the space it leaves. Delayed rather than slowed, so both directions are
+    // the one spring.
+    plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+  }, [blur, clearLead, closeSheet, gridOpacity, menuOpacity, morph, open, plusOut]);
 
   const showPhotos = useCallback(() => {
     setMode('photos');
@@ -239,21 +277,24 @@ function ChatGptAttachmentsContent() {
     );
   }, []);
 
-  /** Runs when the flight lands, handing the thumbnail over to the composer. */
+  /** Runs when the flight lands, handing the thumbnails over to the composer. */
   const settleAttachment = useCallback(() => {
-    setFlying(null);
-    // Cleared here rather than on the tap: it invalidates every cell in the
-    // grid, and that commit lands on the same frame the flight starts.
+    // The hand-off, on one commit: the flying copies come off in the same
+    // breath the composer's own thumbnails stop being held back.
+    setFlights([]);
     setSelected([]);
     closeSheet();
+    // Everything the panel drove is reset outright — it is unmounted by now, so
+    // there is nothing left to see it move. `plusOut` is deliberately untouched:
+    // the + came back on its own spring while the photos flew, and it is on
+    // screen.
     open.set(0);
     morph.set(0);
     attach.set(0);
-    flyOpacity.set(0);
     gridOpacity.set(0);
     menuOpacity.set(1);
     blur.set(0);
-  }, [attach, blur, closeSheet, flyOpacity, gridOpacity, menuOpacity, morph, open]);
+  }, [attach, blur, closeSheet, gridOpacity, menuOpacity, morph, open]);
 
   const confirmSelection = useCallback(() => {
     const picked = selected
@@ -266,32 +307,84 @@ function ChatGptAttachmentsContent() {
       .filter((photo) => !attachments.some((existing) => existing.id === photo.id));
     if (!picked.length) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setAttachSlot(attachments.length);
-    setFlying(picked[0]);
+
+    // Where each photo is sitting, right now, on the frame it leaves. The grid
+    // is inside the panel, which is at rest and fully morphed at this point, so
+    // the panel's own frame is the offset from the window — no measure pass,
+    // and nothing that can land a frame late.
+    const bottom = composerBottom.get();
+    const gridTop = bottom - COMPOSER.rowHeight / 2 + MENU.centerOffset - MENU_HEIGHT / 2;
+    // Only used for a photo the list has not laid out — one scrolled far
+    // enough out that it has no frame to leave from. The middle of the sheet
+    // is the least wrong answer: it is where the sheet is collapsing towards.
+    const cellSize = gridWidth / GRID.columns - GRID.gap;
+    const fallback = {
+      x: GUTTER + (gridWidth - cellSize) / 2,
+      y: gridTop + (gridHeight - cellSize) / 2,
+      w: cellSize,
+      h: cellSize,
+    };
+
+    const base = attachments.length;
+    setFlights(
+      picked.map((photo, index) => {
+        const cell = gridRef.current?.measureCell(photo.id);
+        return {
+          photo,
+          slot: base + index,
+          from: cell
+            ? { x: GUTTER + cell.x, y: gridTop + cell.y, w: cell.w, h: cell.h }
+            : fallback,
+        };
+      }),
+    );
     setAttachments((prev) => [...prev, ...picked]);
 
-    flyOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    // The sheet leaves the way any close leaves it — back into the + button, on
+    // the spring with the bounce taken out. It is not carrying the photos any
+    // more, so it has no reason to go anywhere else.
+    setClosing(true);
+    blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
     gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    morph.set(withSpring(0, SPRING.panelOut));
+    open.set(withSpring(0, SPRING.panelOut));
+    plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+
+    // The photos go their own way, out of the cells they were sitting in. The
+    // sheet's collapse and this are the same length, so they read as one move
+    // coming apart rather than two.
     attach.set(
       withSpring(1, SPRING.attach, (finished) => {
         'worklet';
         if (finished) scheduleOnRN(settleAttachment);
       }),
     );
-  }, [attach, attachments, flyOpacity, gridOpacity, photos, selected, settleAttachment]);
+  }, [
+    attach,
+    attachments,
+    blur,
+    composerBottom,
+    gridHeight,
+    gridOpacity,
+    gridWidth,
+    morph,
+    open,
+    photos,
+    plusOut,
+    selected,
+    settleAttachment,
+  ]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((photo) => photo.id !== id));
   }, []);
 
-
-  // Mounted as soon as a photo is picked so its decode is already paid for by
-  // the time the panel flies; `flying` only decides when it becomes visible.
-  const flyingPhoto =
-    flying ?? photos.find((photo) => photo.id === selected[0]) ?? null;
+  const isFlying = flights.length > 0;
 
   const onPlusPress = useCallback(() => {
-    if (mode === 'closed') openMenu();
+    // A lead-in is in flight for its whole length while `mode` is still shut,
+    // so the ref is what says whether this tap is opening or closing.
+    if (mode === 'closed' && leadTimer.current === null) openMenu();
     else dismiss();
   }, [dismiss, mode, openMenu]);
 
@@ -320,9 +413,11 @@ function ChatGptAttachmentsContent() {
           ref={inputRef}
           attachments={attachments}
           strip={strip}
-          // The composer's own thumbnail stays blank until the panel finishes
-          // landing on it, so the photo is never on screen twice.
-          pendingId={flying?.id ?? null}
+          // Drives the + glyph out of the menu's way, a beat ahead of it.
+          plusOut={plusOut}
+          // The composer's own thumbnails stay blank until the flying copies
+          // finish landing on them, so a photo is never on screen twice.
+          pendingIds={flights.map((flight) => flight.photo.id)}
           onPlusPress={onPlusPress}
           onRemove={removeAttachment}
         />
@@ -332,21 +427,20 @@ function ChatGptAttachmentsContent() {
           sit over it — so it has to be hosted in the window above it. */}
       <OverKeyboardView visible={mode !== 'closed'}>
         {mode !== 'closed' ? (
-          <View style={StyleSheet.absoluteFill}>
+          // Nothing in here takes a touch once the photos are on their way:
+          // the sheet is leaving, and a tap on the backdrop it is still
+          // covering would start a second close on top of this one.
+          <View pointerEvents={isFlying ? 'none' : 'box-none'} style={StyleSheet.absoluteFill}>
             <Pressable
               accessibilityLabel="Close attachment menu"
               onPress={dismiss}
               style={StyleSheet.absoluteFill}
             />
             <AttachmentPanel
-              screenWidth={width}
               screenHeight={height}
               gridWidth={gridWidth}
               gridHeight={gridHeight}
-              interactive={flying ? 'none' : mode === 'photos' ? 'grid' : 'menu'}
-              attachSlot={attachSlot}
-              flying={flyingPhoto}
-              isFlying={!!flying}
+              interactive={isFlying ? 'none' : mode === 'photos' ? 'grid' : 'menu'}
               // The material is the panel's, not the menu's: it stays on
               // through the morph so the grid has the same surface behind its
               // cells and in the gaps between them, and goes only once the
@@ -357,21 +451,22 @@ function ChatGptAttachmentsContent() {
               glassDuration={DURATION.panel / 1000}
               open={open}
               morph={morph}
-              attach={attach}
               menuOpacity={menuOpacity}
               gridOpacity={gridOpacity}
-              flyOpacity={flyOpacity}
               blur={blur}
-              strip={strip}
               composerBottom={composerBottom}
               menu={<AttachmentMenu onSelect={onMenuAction} />}
               grid={
                 <PhotoGrid
+                  ref={gridRef}
                   width={gridWidth}
                   height={gridHeight}
                   photos={photos}
                   status={status}
                   selected={selected}
+                  // The cells the flight is carrying are cut on the frame it
+                  // starts. Their copies are leaving from that exact rect.
+                  lifting={isFlying}
                   onTogglePhoto={togglePhoto}
                 />
               }
@@ -385,10 +480,20 @@ function ChatGptAttachmentsContent() {
             <PhotoGridBar
               width={gridWidth}
               selected={selected}
-              active={mode === 'photos' && !flying}
+              active={mode === 'photos' && !isFlying}
               fade={gridOpacity}
               onBack={backToMenu}
               onConfirm={confirmSelection}
+            />
+
+            {/* Above the sheet, and outside its clip: the photos have left it,
+                and the last third of the way is over the composer. */}
+            <AttachmentFlight
+              flights={flights}
+              screenWidth={width}
+              attach={attach}
+              strip={strip}
+              composerBottom={composerBottom}
             />
           </View>
         ) : null}

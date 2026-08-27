@@ -1,7 +1,14 @@
 import { Icon } from '@/components/icon';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
-import { memo, useEffect, useState } from 'react';
+import {
+  forwardRef,
+  memo,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   interpolate,
@@ -31,10 +38,22 @@ interface CellProps {
   slot: number;
   /** 1-based tap order, or 0 when the photo isn't selected. */
   order: number;
+  /**
+   * True once this photo has left for the composer. Cut rather than faded: a
+   * copy of it is flying out of this exact rect on the same frame, and two of
+   * the same photo pulling apart is the one thing a shared element cannot show.
+   */
+  lifted: boolean;
   onPress: (photo: LibraryPhoto) => void;
 }
 
-const PhotoCell = memo(function PhotoCell({ photo, slot, order, onPress }: CellProps) {
+const PhotoCell = memo(function PhotoCell({
+  photo,
+  slot,
+  order,
+  lifted,
+  onPress,
+}: CellProps) {
   const selected = order > 0;
   // Selection is the badge and nothing else: in the reference the thumbnail
   // itself is untouched — it does not shrink, dim, or round its corners.
@@ -52,7 +71,7 @@ const PhotoCell = memo(function PhotoCell({ photo, slot, order, onPress }: CellP
       accessibilityRole="imagebutton"
       accessibilityState={{ selected }}
       onPress={() => onPress(photo)}
-      style={{ width: slot, height: slot }}
+      style={{ width: slot, height: slot, opacity: lifted ? 0 : 1 }}
     >
       <View style={styles.cell}>
         <Image
@@ -169,7 +188,30 @@ interface PhotoGridProps {
   status: LibraryStatus;
   /** Ids in tap order — the index inside drives the badge number. */
   selected: string[];
+  /**
+   * True once the selected photos have left for the composer. Only the cells
+   * that left are cut, so the commit this causes touches those and nothing
+   * else — the rest of the grid is memoised past it.
+   */
+  lifting: boolean;
   onTogglePhoto: (photo: LibraryPhoto) => void;
+}
+
+/** Frame of one cell, in the grid's own coordinates. */
+export interface CellFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface PhotoGridHandle {
+  /**
+   * Where a photo is sitting right now, or null if the list has not laid that
+   * index out yet. Measured off the list rather than derived from the index:
+   * the cell's frame is the one thing the flight cannot afford to guess at.
+   */
+  measureCell: (id: string) => CellFrame | null;
 }
 
 /**
@@ -177,20 +219,44 @@ interface PhotoGridProps {
  * on-screen size and then left alone: the panel scales this whole subtree
  * during the morph, so nothing in here has to know a transition is happening.
  */
-export function PhotoGrid({
-  width,
-  height,
-  photos,
-  status,
-  selected,
-  onTogglePhoto,
-}: PhotoGridProps) {
+export const PhotoGrid = forwardRef<PhotoGridHandle, PhotoGridProps>(function PhotoGrid(
+  { width, height, photos, status, selected, lifting, onTogglePhoto },
+  handle,
+) {
   const slot = slotSize(width);
+  const listRef = useRef<FlashListRef<LibraryPhoto>>(null);
+
+  useImperativeHandle(
+    handle,
+    () => ({
+      measureCell: (id) => {
+        const list = listRef.current;
+        const index = photos.findIndex((photo) => photo.id === id);
+        if (!list || index < 0) return null;
+        const layout = list.getLayout(index);
+        if (!layout) return null;
+        // `getLayout` is in content coordinates; the scroll offset carries the
+        // list's own leading inset, so the inset has to go back in to land on
+        // a viewport position.
+        const scrolled = list.getAbsoluteLastScrollOffset() - list.getFirstItemOffset();
+        return {
+          x: layout.x,
+          y: layout.y - scrolled,
+          // The cell is inset inside its slot on the right and bottom — that
+          // hairline is the sheet showing through, not part of the photo.
+          w: layout.width - GRID.gap,
+          h: layout.height - GRID.gap,
+        };
+      },
+    }),
+    [photos],
+  );
 
   return (
     <View style={[styles.root, { width, height }]}>
       {status === 'ready' ? (
         <FlashList
+          ref={listRef}
           data={photos}
           numColumns={GRID.columns}
           keyExtractor={(item) => item.id}
@@ -199,10 +265,11 @@ export function PhotoGrid({
               photo={item}
               slot={slot}
               order={selected.indexOf(item.id) + 1}
+              lifted={lifting && selected.includes(item.id)}
               onPress={onTogglePhoto}
             />
           )}
-          extraData={selected}
+          extraData={`${selected.join()}|${lifting}`}
           // The keyboard is up the whole time this grid is on screen. Without
           // this the underlying scroll view treats the first tap as "dismiss
           // the keyboard" and swallows it, so the photo never gets selected.
@@ -226,7 +293,7 @@ export function PhotoGrid({
 
     </View>
   );
-}
+});
 
 interface PhotoGridBarProps {
   width: number;
