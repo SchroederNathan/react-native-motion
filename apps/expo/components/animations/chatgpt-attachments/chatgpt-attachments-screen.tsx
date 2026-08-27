@@ -181,32 +181,30 @@ function ChatGptAttachmentsContent() {
     gridOpacity.set(0);
     menuOpacity.set(1);
     blur.set(1);
-    // The one transition here with real bounce. The panel starts as the circle
-    // around the + button; an ease-out would already be a fifth of the way out
-    // by the second frame and the circle would never be seen. A spring holds
-    // small long enough to read, then throws the menu out of it — and its
-    // overshoot carries the menu a few points past its resting size, which is
-    // the pop a context menu has on iOS.
-    open.set(withSpring(1, SPRING.menuIn));
+    // A spring rather than a curve because the panel starts as the circle
+    // around the + button: an ease-out is already a fifth of the way out by the
+    // second frame and the circle is never seen, where a spring holds small
+    // long enough to read it.
+    open.set(withSpring(1, SPRING.panel));
     blur.set(withTiming(0, { duration: DURATION.blur, easing: EASE_FADE }));
   }, [attach, blur, flyOpacity, gridOpacity, menuOpacity, morph, open]);
 
   const dismiss = useCallback(() => {
     setSelected([]);
     // Hands the material to its own native transition for the way out, so it
-    // fades over the same 240ms the panel takes to collapse into the + button
+    // fades over the same stretch the panel takes to collapse into the + button
     // rather than staying solid until the sheet is torn out from under it. Its
     // opacity is the one thing that cannot carry this — a `GlassView` under an
     // animated opacity renders nothing at all, even at 1.
     setClosing(true);
-    blur.set(withTiming(1, { duration: DURATION.menuOut, easing: EASE_FADE }));
-    // Critically damped, both here and on `open`: an overshoot below zero would
-    // take the panel's rect past the + button and turn it inside out.
-    morph.set(withSpring(0, SPRING.menuOut));
+    blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
+    // Critically damped, which is what this needs: an overshoot below zero
+    // would take the panel's rect past the + button and turn it inside out.
+    morph.set(withSpring(0, SPRING.panel));
     menuOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
     gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
     open.set(
-      withSpring(0, SPRING.menuOut, (finished) => {
+      withSpring(0, SPRING.panel, (finished) => {
         'worklet';
         if (finished) scheduleOnRN(closeSheet);
       }),
@@ -216,7 +214,7 @@ function ChatGptAttachmentsContent() {
   const showPhotos = useCallback(() => {
     setMode('photos');
     pulseBlur();
-    morph.set(withSpring(1, SPRING.toGrid));
+    morph.set(withSpring(1, SPRING.panel));
     menuOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
     gridOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
   }, [gridOpacity, menuOpacity, morph, pulseBlur]);
@@ -225,7 +223,7 @@ function ChatGptAttachmentsContent() {
     setMode('menu');
     setSelected([]);
     pulseBlur();
-    morph.set(withSpring(0, SPRING.toMenu));
+    morph.set(withSpring(0, SPRING.panel));
     menuOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
     gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
   }, [gridOpacity, menuOpacity, morph, pulseBlur]);
@@ -291,14 +289,6 @@ function ChatGptAttachmentsContent() {
     setAttachments((prev) => prev.filter((photo) => photo.id !== id));
   }, []);
 
-  // Whichever transition last touched the material sets how long it takes.
-  const glassDuration = closing
-    ? DURATION.menuOut
-    : mode === 'menu'
-      ? DURATION.menuIn
-      : mode === 'photos'
-        ? DURATION.toGrid
-        : DURATION.menuOut;
 
   // Mounted as soon as a photo is picked so its decode is already paid for by
   // the time the panel flies; `flying` only decides when it becomes visible.
@@ -367,7 +357,9 @@ function ChatGptAttachmentsContent() {
               // cells and in the gaps between them, and goes only once the
               // sheet is on its way out.
               glass={!closing}
-              glassDuration={glassDuration / 1000}
+              // One number: every move the panel makes is the same spring, so
+              // the material has only one pace to keep.
+              glassDuration={DURATION.panel / 1000}
               open={open}
               morph={morph}
               attach={attach}

