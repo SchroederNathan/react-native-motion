@@ -201,7 +201,6 @@ export function AttachmentPanel({
           <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
         </Animated.View>
       </Animated.View>
-
     </Animated.View>
   );
 }

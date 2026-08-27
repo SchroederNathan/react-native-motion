@@ -7,7 +7,7 @@ import Animated, { type AnimatedProps } from 'react-native-reanimated';
 import { COLORS } from './constants';
 
 /** True on iOS 26+, where `expo-glass-effect` renders the real material. */
-export const LIQUID_GLASS = isLiquidGlassAvailable();
+const LIQUID_GLASS = isLiquidGlassAvailable();
 
 /**
  * Whether a `BlurView` here actually samples what is behind it.
@@ -22,7 +22,7 @@ const BLURS_ITS_BACKDROP = Platform.OS !== 'android';
 
 const AnimatedGlassView = Animated.createAnimatedComponent(GlassView);
 
-export type GlassStyleName = 'regular' | 'clear' | 'none';
+export type GlassStyleName = 'regular' | 'none';
 
 /**
  * A `GlassView` cannot be brought in or out by animating opacity — put one
@@ -50,8 +50,6 @@ function shapeOf(radius: number): ViewStyle {
 }
 
 export interface GlassProps extends ViewProps {
-  /** Opaque fill laid over the material — used by the blue "Add" pill. */
-  tintColor?: string;
   /**
    * Fill for the `expo-blur` stand-in only. Lets a surface wear real glass on
    * iOS 26 while keeping the colour it was measured at below it.
@@ -81,7 +79,6 @@ export interface GlassProps extends ViewProps {
  * bounds, which is why neither this nor any of its ancestors clips.
  */
 export function Glass({
-  tintColor,
   fallbackTint,
   radius = 0,
   active = true,
@@ -106,7 +103,7 @@ export function Glass({
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { backgroundColor: tintColor ?? fallbackTint ?? COLORS.controlScrim },
+            { backgroundColor: fallbackTint ?? COLORS.controlScrim },
           ]}
         />
         {children}
@@ -122,12 +119,6 @@ export function Glass({
       style={[shapeOf(radius), style]}
       {...rest}
     >
-      {tintColor ? (
-        <View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, shapeOf(radius), { backgroundColor: tintColor }]}
-        />
-      ) : null}
       {children}
     </GlassView>
   );
@@ -140,8 +131,6 @@ export function Glass({
  * and the whole panel sits at rgb(30,30,30) over black. `expo-blur` stands in
  * below iOS 26, tuned to that same measurement.
  *
- * Only ever `regular` or `none`. The grid's container is a different, far
- * lighter treatment — see `gridScrim` in `constants.ts`.
  *
  * `style` carries the panel's live corner radius: the material rounds itself
  * rather than being clipped by the panel, so it can still bulge under a press.

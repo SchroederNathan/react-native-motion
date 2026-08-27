@@ -84,7 +84,6 @@ export interface ComposerProps {
   pendingIds: string[];
   onPlusPress: () => void;
   onRemove: (id: string) => void;
-  onFocus?: () => void;
 }
 
 /**
@@ -99,7 +98,7 @@ export interface ComposerProps {
  * its bounds, and an `overflow: hidden` on the bar would cut them off.
  */
 export const Composer = forwardRef<TextInputType, ComposerProps>(function Composer(
-  { attachments, strip, plusOut, pendingIds, onPlusPress, onRemove, onFocus },
+  { attachments, strip, plusOut, pendingIds, onPlusPress, onRemove },
   ref,
 ) {
   const hasAttachments = attachments.length > 0;
@@ -202,7 +201,6 @@ export const Composer = forwardRef<TextInputType, ComposerProps>(function Compos
           // keyboard is what the sheet's material is sampling for most of its
           // height, so a light keyboard turns the whole sheet light grey.
           keyboardAppearance="dark"
-          onFocus={onFocus}
           multiline={false}
           style={styles.field}
         />

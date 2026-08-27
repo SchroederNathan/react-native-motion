@@ -7,16 +7,9 @@ import {
   GRID,
   GUTTER,
   mix,
+  type Frame,
 } from './constants';
 import type { LibraryPhoto } from './use-photo-library';
-
-/** A rect in window coordinates. */
-export interface Frame {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
 
 export interface Flight {
   photo: LibraryPhoto;

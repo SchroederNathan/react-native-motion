@@ -291,6 +291,14 @@ export const DURATION = {
   plusLead: 30,
 } as const;
 
+/** A rect. Window coordinates unless the field it sits on says otherwise. */
+export interface Frame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /**
  * Linear interpolation, on the UI thread. Lives here rather than in one of the
  * views because the panel and the photos flying out of it have to agree on how

@@ -19,7 +19,16 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import { BOTTOM_BAR, COLORS, DURATION, EASE_FADE, GRID, GUTTER, SPRING } from './constants';
+import {
+  BOTTOM_BAR,
+  COLORS,
+  DURATION,
+  EASE_FADE,
+  GRID,
+  GUTTER,
+  SPRING,
+  type Frame,
+} from './constants';
 import { Glass } from './glass';
 import type { LibraryPhoto, LibraryStatus } from './use-photo-library';
 
@@ -197,21 +206,14 @@ interface PhotoGridProps {
   onTogglePhoto: (photo: LibraryPhoto) => void;
 }
 
-/** Frame of one cell, in the grid's own coordinates. */
-export interface CellFrame {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
 export interface PhotoGridHandle {
   /**
-   * Where a photo is sitting right now, or null if the list has not laid that
-   * index out yet. Measured off the list rather than derived from the index:
-   * the cell's frame is the one thing the flight cannot afford to guess at.
+   * Where a photo is sitting right now, in the grid's own coordinates, or null
+   * if the list has not laid that index out yet. Measured off the list rather
+   * than derived from the index: the cell's frame is the one thing the flight
+   * cannot afford to guess at.
    */
-  measureCell: (id: string) => CellFrame | null;
+  measureCell: (id: string) => Frame | null;
 }
 
 /**
@@ -290,7 +292,6 @@ export const PhotoGrid = forwardRef<PhotoGridHandle, PhotoGridProps>(function Ph
           </Text>
         </View>
       )}
-
     </View>
   );
 });

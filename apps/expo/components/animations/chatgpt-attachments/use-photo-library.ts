@@ -14,8 +14,6 @@ export interface LibraryPhoto {
    * which `expo-image` loads directly, so this doubles as the image source.
    */
   id: string;
-  width: number;
-  height: number;
 }
 
 export type LibraryStatus = 'loading' | 'denied' | 'empty' | 'ready';
@@ -23,8 +21,6 @@ export type LibraryStatus = 'loading' | 'denied' | 'empty' | 'ready';
 export interface PhotoLibrary {
   photos: LibraryPhoto[];
   status: LibraryStatus;
-  permission: PermissionResponse | null;
-  requestPermission: () => void;
 }
 
 function isReadable(permission: PermissionResponse | null) {
@@ -52,13 +48,7 @@ export function usePhotoLibrary(): PhotoLibrary {
         .limit(GRID.pageSize)
         .exeForMetadata();
 
-      setPhotos(
-        assets.map((asset) => ({
-          id: asset.id,
-          width: asset.width ?? 1,
-          height: asset.height ?? 1,
-        })),
-      );
+      setPhotos(assets.map((asset) => ({ id: asset.id })));
       setStatus(assets.length ? 'ready' : 'empty');
     } catch {
       setStatus('denied');
@@ -81,5 +71,5 @@ export function usePhotoLibrary(): PhotoLibrary {
     }
   }, [permission, load]);
 
-  return { photos, status, permission, requestPermission };
+  return { photos, status };
 }
