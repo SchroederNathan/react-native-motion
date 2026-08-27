@@ -144,11 +144,6 @@ function ChatGptAttachmentsContent() {
   // The sheet stops a gutter short of the bottom of the screen, so the grid
   // laid out inside it has to as well — see the panel's `rect`.
   const gridHeight = height - panelTop - GUTTER;
-  /**
-   * The floating controls sit over the sheet, not over the screen, so they
-   * clear the sheet's own bottom edge rather than the device's.
-   */
-  const barInset = insets.bottom + GUTTER;
 
   /**
    * Tearing down the over-keyboard window drops the keyboard with it, while
@@ -198,13 +193,13 @@ function ChatGptAttachmentsContent() {
     // animated opacity renders nothing at all, even at 1.
     setClosing(true);
     blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
-    // Critically damped, which is what this needs: an overshoot below zero
-    // would take the panel's rect past the + button and turn it inside out.
-    morph.set(withSpring(0, SPRING.panel));
+    // `panelOut`, not `panel`: the sheet is leaving, and a bounce on the way
+    // out would be the panel arguing with the tap that dismissed it.
+    morph.set(withSpring(0, SPRING.panelOut));
     menuOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
     gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
     open.set(
-      withSpring(0, SPRING.panel, (finished) => {
+      withSpring(0, SPRING.panelOut, (finished) => {
         'worklet';
         if (finished) scheduleOnRN(closeSheet);
       }),
@@ -377,7 +372,6 @@ function ChatGptAttachmentsContent() {
                   photos={photos}
                   status={status}
                   selected={selected}
-                  bottomInset={barInset}
                   onTogglePhoto={togglePhoto}
                 />
               }
@@ -390,7 +384,6 @@ function ChatGptAttachmentsContent() {
                 reference keeps them the whole time they are up. */}
             <PhotoGridBar
               width={gridWidth}
-              bottomInset={barInset}
               selected={selected}
               active={mode === 'photos' && !flying}
               fade={gridOpacity}

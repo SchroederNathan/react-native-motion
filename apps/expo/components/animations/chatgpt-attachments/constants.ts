@@ -140,8 +140,13 @@ export const BOTTOM_BAR = {
    * Inset from the sheet's own edge, not the screen's — measured off the
    * reference, where the ‹ button and the pill both sit 25pt inside the sheet
    * (so 37pt from the screen edge, once the gutter is counted).
+   *
+   * The same on all three sides. The controls float in the sheet's bottom
+   * corners, and a corner only reads as a corner when both of its gaps match —
+   * so the bottom is measured from the sheet's edge too, not from the home
+   * indicator, which would push it out by however much the device inset is.
    */
-  paddingHorizontal: 25,
+  inset: 25,
   backSize: 46,
   backIcon: 22,
   pillHeight: 43,
@@ -196,27 +201,46 @@ export const SPRING = {
    *
    * ⟵ THIS IS THE NUMBER TO TUNE. Lower is faster. 550 is the stock default,
    * ~300 is about the pace UIKit opens a context menu at.
+   *
+   * `dampingRatio` is the bounce. 1 is the default and does not overshoot at
+   * all; below it, the panel goes a little past its resting size and settles
+   * back. How far past, as a fraction of the whole move:
+   *
+   *   0.9  → 0.2%   0.8  → 1.5%   0.7  → 4.6%
+   *   0.85 → 0.6%   0.75 → 2.8%   0.5  → 16%   (Reanimated 3's old default)
+   *
+   * 0.75 is `WigglySpringConfig`, which is as bouncy as Reanimated's own
+   * presets go. 0.8 sits just inside that: on the 280pt menu it is about four
+   * points of overshoot — enough to read as thrown rather than placed, not
+   * enough to look like a toy.
    */
-  panel: { duration: 300 },
+  panel: { duration: 400, dampingRatio: 0.8 },
+  /**
+   * The same spring with the bounce taken out, for the way back to the +
+   * button. Things arriving are allowed to overshoot; things leaving are not —
+   * and `open` overshooting below zero would take the panel's rect past the
+   * button it is collapsing into.
+   */
+  panelOut: { duration: 400, dampingRatio: 1 },
   /**
    * Grid → the thumbnail's slot in the composer. Not the default spring: this
    * one has to beat nothing in particular, but it does have to arrive after
    * `strip` has finished opening the slot it is aiming at.
    */
-  attach: { duration: 300},
+  attach: { duration: 400 },
   /**
    * The composer growing around the attachment strip and collapsing back.
    * Deliberately shorter than `attach`, for the reason above.
    */
-  strip: { duration: 300 },
+  strip: { duration: 400 },
   /** Selection badge pop — the one thing here allowed to look springy. */
-  badge: { duration: 300 },
+  badge: { duration: 400 },
   /**
    * The confirm capsule resizing as its label grows. SwiftUI's `.snappy` with
    * half its duration: the capsule is chasing a tap, so it has to be back at
    * rest before the next one lands.
    */
-  pill: { duration: 300 },
+  pill: { duration: 400 },
 } as const;
 
 /**

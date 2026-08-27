@@ -169,7 +169,6 @@ interface PhotoGridProps {
   status: LibraryStatus;
   /** Ids in tap order — the index inside drives the badge number. */
   selected: string[];
-  bottomInset: number;
   onTogglePhoto: (photo: LibraryPhoto) => void;
 }
 
@@ -184,7 +183,6 @@ export function PhotoGrid({
   photos,
   status,
   selected,
-  bottomInset,
   onTogglePhoto,
 }: PhotoGridProps) {
   const slot = slotSize(width);
@@ -211,9 +209,7 @@ export function PhotoGrid({
           keyboardShouldPersistTaps="always"
           keyboardDismissMode="none"
           // The bar floats over the grid, so the last row has to clear it.
-          ListFooterComponent={
-            <View style={{ height: bottomInset + BOTTOM_BAR.pillHeight + 24 }} />
-          }
+          ListFooterComponent={<View style={styles.footer} />}
           showsVerticalScrollIndicator={false}
         />
       ) : (
@@ -234,7 +230,6 @@ export function PhotoGrid({
 
 interface PhotoGridBarProps {
   width: number;
-  bottomInset: number;
   selected: string[];
   /** Whether the controls are wearing their glass. */
   active: boolean;
@@ -263,7 +258,6 @@ interface PhotoGridBarProps {
  */
 export function PhotoGridBar({
   width,
-  bottomInset,
   selected,
   active,
   fade,
@@ -278,7 +272,7 @@ export function PhotoGridBar({
       // with their contents faded out. Without this they would still take the
       // taps meant for the menu behind them.
       pointerEvents={active ? 'box-none' : 'none'}
-      style={[styles.bar, { bottom: bottomInset, width }]}
+      style={[styles.bar, { width }]}
     >
       <Pressable accessibilityRole="button" accessibilityLabel="Back to menu" onPress={onBack}>
         <Glass
@@ -353,12 +347,20 @@ const styles = StyleSheet.create({
   },
   bar: {
     position: 'absolute',
-    // The controls belong to the sheet, so they start where it does.
+    // The controls belong to the sheet, so they sit inside its edges rather
+    // than the screen's — the same inset on the bottom as on the sides, which
+    // is what squares up the two corners they float in. The sheet stops a
+    // gutter short of the bottom of the screen, so that gutter is counted in.
     left: GUTTER,
+    bottom: GUTTER + BOTTOM_BAR.inset,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: BOTTOM_BAR.paddingHorizontal,
+    paddingHorizontal: BOTTOM_BAR.inset,
+  },
+  /** Lets the last row scroll clear of the floating bar. */
+  footer: {
+    height: BOTTOM_BAR.inset + BOTTOM_BAR.pillHeight + 24,
   },
   back: {
     width: BOTTOM_BAR.backSize,
