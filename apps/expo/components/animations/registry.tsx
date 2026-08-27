@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import { AuroraCurtainScreen } from './aurora-curtain';
 import { BlurredTextMorphScreen } from './blurred-text-morph';
+import { ChatGptAttachmentsScreen } from './chatgpt-attachments';
 import { GalleryCarouselScreen } from './gallery-carousel';
 import { RadialMenuScreen } from './radial-menu';
 import { StackToastScreen } from './spring-toast';
@@ -13,6 +14,7 @@ import { StackToastScreen } from './spring-toast';
 export const animationScreens: Record<string, ComponentType> = {
   'aurora-curtain': AuroraCurtainScreen,
   'blurred-text-morph': BlurredTextMorphScreen,
+  'chatgpt-attachments': ChatGptAttachmentsScreen,
   'gallery-carousel': GalleryCarouselScreen,
   'radial-menu': RadialMenuScreen,
   'spring-toast': StackToastScreen,

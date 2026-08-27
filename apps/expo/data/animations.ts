@@ -38,6 +38,13 @@ export const animations: Animation[] = [
     video: require('../assets/videos/blurred-text-morph.mp4'),
   },
   {
+    title: 'Attachment Menu',
+    slug: 'chatgpt-attachments',
+    description:
+      'The ChatGPT media picker, rebuilt off a frame-by-frame reading of the real thing. One glass panel grows out of the + button, morphs into a full-bleed photo grid, and then shrinks into the composer carrying the photo you picked — the same surface the whole way through.',
+    tags: ['menu', 'morph', 'glass', 'shared-element', 'photos', 'keyboard', 'ease-out'],
+  },
+  {
     title: 'Gallery Stack Carousel',
     slug: 'gallery-carousel',
     description:

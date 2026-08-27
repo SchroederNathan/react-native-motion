@@ -42,6 +42,15 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera"
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to show your photos in the attachment picker demo.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["photo"]
+        }
+      ],
       "expo-video",
       "expo-font",
       [
