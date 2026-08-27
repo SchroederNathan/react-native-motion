@@ -2,12 +2,23 @@ import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
 import Animated, { type AnimatedProps } from 'react-native-reanimated';
 import { COLORS } from './constants';
 
 /** True on iOS 26+, where `expo-glass-effect` renders the real material. */
 export const LIQUID_GLASS = isLiquidGlassAvailable();
+
+/**
+ * Whether a `BlurView` here actually samples what is behind it.
+ *
+ * On iOS it always does. On Android it never does in this screen: the blur is
+ * a view that copies its own window's contents, and the sheet is hosted over
+ * the keyboard in a window of its own — so what it finds behind itself is
+ * nothing, and it comes out as the tint alone over whatever really shows
+ * through. Surfaces below fall back to the flat colour they were measured at.
+ */
+const BLURS_ITS_BACKDROP = Platform.OS !== 'android';
 
 const AnimatedGlassView = Animated.createAnimatedComponent(GlassView);
 
@@ -155,9 +166,17 @@ export function PanelMaterial({
     if (variant === 'none') return null;
     return (
       <Animated.View pointerEvents="none" style={[styles.clip, style]}>
-        <BlurView intensity={70} tint="systemUltraThinMaterialDark" style={StyleSheet.absoluteFill}>
-          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fallbackTint]} />
-        </BlurView>
+        {BLURS_ITS_BACKDROP ? (
+          <BlurView
+            intensity={70}
+            tint="systemUltraThinMaterialDark"
+            style={StyleSheet.absoluteFill}
+          >
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fallbackTint]} />
+          </BlurView>
+        ) : (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatMaterial]} />
+        )}
       </Animated.View>
     );
   }
@@ -181,5 +200,8 @@ const styles = StyleSheet.create({
   },
   fallbackTint: {
     backgroundColor: COLORS.material,
+  },
+  flatMaterial: {
+    backgroundColor: COLORS.materialFlat,
   },
 });

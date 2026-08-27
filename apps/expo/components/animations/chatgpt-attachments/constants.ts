@@ -32,6 +32,14 @@ export const COLORS = {
    * rgb(30,30,30). The blur alone lands at 19, so this closes the remaining 11.
    */
   material: 'rgba(255,255,255,0.047)',
+  /**
+   * The same material where there is no blur to lay it over — the number the
+   * two above are aiming at, straight. Android's blur can only sample its own
+   * window, and the sheet is hosted over the keyboard in another one, so a blur
+   * there returns nothing and the tint alone is 4.7% white over whatever shows
+   * through. This is that measurement as an opaque fill.
+   */
+  materialFlat: '#1E1E1E',
 } as const;
 
 export const COMPOSER = {
