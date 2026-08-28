@@ -22,6 +22,11 @@ export interface Flight {
   from: Frame;
   /** Index of the composer slot it is landing on. */
   slot: number;
+  /**
+   * Corner radius it leaves with. A grid cell's hairline radius by default; a
+   * camera capture leaves as the whole sheet and starts from the sheet's own.
+   */
+  fromRadius?: number;
 }
 
 interface FlyingPhotoProps {
@@ -66,7 +71,7 @@ function FlyingPhoto({
       top: mix(a, flight.from.y, toY),
       width: mix(a, flight.from.w, COMPOSER.thumbSize),
       height: mix(a, flight.from.h, COMPOSER.thumbSize),
-      borderRadius: mix(a, GRID.cellRadius, COMPOSER.thumbRadius),
+      borderRadius: mix(a, flight.fromRadius ?? GRID.cellRadius, COMPOSER.thumbRadius),
     };
   });
 
@@ -99,6 +104,10 @@ interface AttachmentFlightProps extends Omit<FlyingPhotoProps, 'flight'> {
  * a sheet that is collapsing at the same time, and nothing survives being in
  * two coordinate spaces at once. The grid hides the originals on the frame
  * these appear, so what you see is one photo leaving one place for another.
+ *
+ * A camera capture rides the same path with a different start: it leaves as
+ * the whole sheet — the preview's rect and the sheet's corner radius — and the
+ * preview is cut underneath it on the same frame.
  *
  * Every copy rides the same `attach` spring. They were picked together and
  * they arrive together; staggering them would invent an order the taps did not

@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@/theme';
+import type { CameraType, FlashMode } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { Stack } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -30,6 +31,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { AttachmentFlight, type Flight } from './attachment-flight';
 import { AttachmentMenu, type MenuAction } from './attachment-menu';
 import { AttachmentPanel } from './attachment-panel';
+import { CameraBar } from './camera-bar';
+import { CameraSheet, type CameraSheetHandle } from './camera-sheet';
 import { Composer } from './composer';
 import {
   COLORS,
@@ -47,7 +50,15 @@ import { PhotoGrid, PhotoGridBar, type PhotoGridHandle } from './photo-grid';
 import { chatgptAttachmentsTheme } from './theme';
 import { usePhotoLibrary, type LibraryPhoto } from './use-photo-library';
 
-type Mode = 'closed' | 'menu' | 'photos';
+type Mode = 'closed' | 'menu' | 'photos' | 'camera';
+
+/**
+ * What the panel turns into once it stops being the menu. Kept apart from
+ * `mode`, because it has to outlive it: on the way back to the menu the sheet
+ * is still crossfading out, and swapping its contents mid-fade would flash the
+ * other sheet through it.
+ */
+type Sheet = 'photos' | 'camera';
 
 /** Chat history rows sitting above the composer, as in the reference. */
 const SUGGESTIONS = ['Audit TestFlight review risk', 'Gym week planner'];
@@ -59,10 +70,16 @@ function ChatGptAttachmentsContent() {
   const { photos, status } = usePhotoLibrary();
   const inputRef = useRef<TextInput>(null);
   const gridRef = useRef<PhotoGridHandle>(null);
+  const cameraRef = useRef<CameraSheetHandle>(null);
   /** Pending panel mount, held back while the + gets out of the way. */
   const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [mode, setMode] = useState<Mode>('closed');
+  const [sheet, setSheet] = useState<Sheet>('photos');
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [flash, setFlash] = useState<FlashMode>('off');
+  /** True from the shutter tap until the capture is in hand — one at a time. */
+  const capturing = useRef(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<LibraryPhoto[]>([]);
   /** The photos currently crossing from the grid to the composer. */
@@ -244,13 +261,22 @@ function ChatGptAttachmentsContent() {
     plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
   }, [blur, clearLead, closeSheet, gridOpacity, menuOpacity, morph, open, plusOut]);
 
-  const showPhotos = useCallback(() => {
-    setMode('photos');
-    pulseBlur();
-    morph.set(withSpring(1, SPRING.panel));
-    menuOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
-    gridOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
-  }, [gridOpacity, menuOpacity, morph, pulseBlur]);
+  /**
+   * Menu → sheet. The one morph, whatever the sheet is about to show: the
+   * camera takes exactly the footprint the grid does, so the panel has one
+   * shape to grow into and one spring to grow on.
+   */
+  const showSheet = useCallback(
+    (next: Sheet) => {
+      setSheet(next);
+      setMode(next);
+      pulseBlur();
+      morph.set(withSpring(1, SPRING.panel));
+      menuOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+      gridOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    },
+    [gridOpacity, menuOpacity, morph, pulseBlur],
+  );
 
   const backToMenu = useCallback(() => {
     setMode('menu');
@@ -263,11 +289,12 @@ function ChatGptAttachmentsContent() {
 
   const onMenuAction = useCallback(
     (action: MenuAction) => {
-      // Only Photos has somewhere to go in this demo; the rest just close.
-      if (action === 'photos') showPhotos();
+      // Photos and Camera have somewhere to go in this demo; the rest close.
+      if (action === 'photos') showSheet('photos');
+      else if (action === 'camera') showSheet('camera');
       else dismiss();
     },
-    [dismiss, showPhotos],
+    [dismiss, showSheet],
   );
 
   const togglePhoto = useCallback((photo: LibraryPhoto) => {
@@ -295,6 +322,40 @@ function ChatGptAttachmentsContent() {
     menuOpacity.set(1);
     blur.set(0);
   }, [attach, blur, closeSheet, gridOpacity, menuOpacity, morph, open]);
+
+  /**
+   * Hands a set of photos to the composer and sends the sheet home. Shared by
+   * the grid's confirm and the camera's shutter: both end the same way, with
+   * copies flying out of wherever the photos were and the panel collapsing back
+   * into the + button underneath them.
+   */
+  const attachAndLeave = useCallback(
+    (leaving: Flight[]) => {
+      setFlights(leaving);
+      setAttachments((prev) => [...prev, ...leaving.map((flight) => flight.photo)]);
+
+      // The sheet leaves the way any close leaves it — back into the + button,
+      // on the spring with the bounce taken out. It is not carrying the photos
+      // any more, so it has no reason to go anywhere else.
+      setClosing(true);
+      blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
+      gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+      morph.set(withSpring(0, SPRING.panelOut));
+      open.set(withSpring(0, SPRING.panelOut));
+      plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+
+      // The photos go their own way, out of wherever they were sitting. The
+      // sheet's collapse and this are the same length, so they read as one
+      // move coming apart rather than two.
+      attach.set(
+        withSpring(1, SPRING.attach, (finished) => {
+          'worklet';
+          if (finished) scheduleOnRN(settleAttachment);
+        }),
+      );
+    },
+    [attach, blur, gridOpacity, morph, open, plusOut, settleAttachment],
+  );
 
   const confirmSelection = useCallback(() => {
     const picked = selected
@@ -326,7 +387,7 @@ function ChatGptAttachmentsContent() {
     };
 
     const base = attachments.length;
-    setFlights(
+    attachAndLeave(
       picked.map((photo, index) => {
         const cell = gridRef.current?.measureCell(photo.id);
         return {
@@ -338,42 +399,48 @@ function ChatGptAttachmentsContent() {
         };
       }),
     );
-    setAttachments((prev) => [...prev, ...picked]);
+  }, [attachAndLeave, attachments, composerBottom, gridHeight, gridWidth, photos, selected]);
 
-    // The sheet leaves the way any close leaves it — back into the + button, on
-    // the spring with the bounce taken out. It is not carrying the photos any
-    // more, so it has no reason to go anywhere else.
-    setClosing(true);
-    blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
-    gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
-    morph.set(withSpring(0, SPRING.panelOut));
-    open.set(withSpring(0, SPRING.panelOut));
-    plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+  /**
+   * The shutter. The picture leaves as the whole sheet: the preview's rect,
+   * with the sheet's own corners, shrinking into the thumbnail's slot the same
+   * way a grid cell does. The preview underneath is cut on the frame the copy
+   * appears, so the capture is never on screen twice.
+   */
+  const capturePhoto = useCallback(async () => {
+    if (capturing.current) return;
+    capturing.current = true;
+    try {
+      const uri = await cameraRef.current?.takePicture();
+      if (!uri) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    // The photos go their own way, out of the cells they were sitting in. The
-    // sheet's collapse and this are the same length, so they read as one move
-    // coming apart rather than two.
-    attach.set(
-      withSpring(1, SPRING.attach, (finished) => {
-        'worklet';
-        if (finished) scheduleOnRN(settleAttachment);
-      }),
-    );
-  }, [
-    attach,
-    attachments,
-    blur,
-    composerBottom,
-    gridHeight,
-    gridOpacity,
-    gridWidth,
-    morph,
-    open,
-    photos,
-    plusOut,
-    selected,
-    settleAttachment,
-  ]);
+      // The sheet's frame, read on the frame it leaves. It is at rest and fully
+      // morphed here, so this is the panel's own rect — no measure pass.
+      const bottom = composerBottom.get();
+      const sheetTop = bottom - COMPOSER.rowHeight / 2 + MENU.centerOffset - MENU_HEIGHT / 2;
+      attachAndLeave([
+        {
+          photo: { id: uri },
+          slot: attachments.length,
+          from: { x: GUTTER, y: sheetTop, w: gridWidth, h: gridHeight },
+          fromRadius: GRID.panelRadius,
+        },
+      ]);
+    } finally {
+      capturing.current = false;
+    }
+  }, [attachAndLeave, attachments.length, composerBottom, gridHeight, gridWidth]);
+
+  const flipCamera = useCallback(() => {
+    Haptics.selectionAsync();
+    setFacing((was) => (was === 'back' ? 'front' : 'back'));
+  }, []);
+
+  const toggleFlash = useCallback(() => {
+    Haptics.selectionAsync();
+    setFlash((was) => (was === 'off' ? 'on' : 'off'));
+  }, []);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((photo) => photo.id !== id));
@@ -440,7 +507,7 @@ function ChatGptAttachmentsContent() {
               screenHeight={height}
               gridWidth={gridWidth}
               gridHeight={gridHeight}
-              interactive={isFlying ? 'none' : mode === 'photos' ? 'grid' : 'menu'}
+              interactive={isFlying ? 'none' : mode === 'menu' ? 'menu' : 'grid'}
               // The material is the panel's, not the menu's: it stays on
               // through the morph so the grid has the same surface behind its
               // cells and in the gaps between them, and goes only once the
@@ -457,18 +524,30 @@ function ChatGptAttachmentsContent() {
               composerBottom={composerBottom}
               menu={<AttachmentMenu onSelect={onMenuAction} />}
               grid={
-                <PhotoGrid
-                  ref={gridRef}
-                  width={gridWidth}
-                  height={gridHeight}
-                  photos={photos}
-                  status={status}
-                  selected={selected}
-                  // The cells the flight is carrying are cut on the frame it
-                  // starts. Their copies are leaving from that exact rect.
-                  lifting={isFlying}
-                  onTogglePhoto={togglePhoto}
-                />
+                sheet === 'camera' ? (
+                  <CameraSheet
+                    ref={cameraRef}
+                    width={gridWidth}
+                    height={gridHeight}
+                    facing={facing}
+                    flash={flash}
+                    // The preview is cut on the frame its copy starts flying.
+                    lifting={isFlying}
+                  />
+                ) : (
+                  <PhotoGrid
+                    ref={gridRef}
+                    width={gridWidth}
+                    height={gridHeight}
+                    photos={photos}
+                    status={status}
+                    selected={selected}
+                    // The cells the flight is carrying are cut on the frame it
+                    // starts. Their copies are leaving from that exact rect.
+                    lifting={isFlying}
+                    onTogglePhoto={togglePhoto}
+                  />
+                )
               }
             />
 
@@ -477,14 +556,27 @@ function ChatGptAttachmentsContent() {
                 animated layers comes out flat — no rim, no refraction. Out
                 here they sit at the bottom of the window, which is where the
                 reference keeps them the whole time they are up. */}
-            <PhotoGridBar
-              width={gridWidth}
-              selected={selected}
-              active={mode === 'photos' && !isFlying}
-              fade={gridOpacity}
-              onBack={backToMenu}
-              onConfirm={confirmSelection}
-            />
+            {sheet === 'camera' ? (
+              <CameraBar
+                width={gridWidth}
+                active={mode === 'camera' && !isFlying}
+                fade={gridOpacity}
+                flash={flash}
+                onBack={backToMenu}
+                onCapture={capturePhoto}
+                onFlip={flipCamera}
+                onToggleFlash={toggleFlash}
+              />
+            ) : (
+              <PhotoGridBar
+                width={gridWidth}
+                selected={selected}
+                active={mode === 'photos' && !isFlying}
+                fade={gridOpacity}
+                onBack={backToMenu}
+                onConfirm={confirmSelection}
+              />
+            )}
 
             {/* Above the sheet, and outside its clip: the photos have left it,
                 and the last third of the way is over the composer. */}

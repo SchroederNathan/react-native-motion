@@ -169,6 +169,31 @@ export const BOTTOM_BAR = {
   pillLabelSize: 17,
 } as const;
 
+export const CAMERA = {
+  /**
+   * The shutter: a white disc inside a ring of glass. Measured off the
+   * reference (1290×2796 @3x): the ring spans 203px and the disc 182px, so a
+   * 68pt control with a 60pt disc — 4pt of material showing all the way round.
+   * It is centred on the same line as the two 46pt controls beside it, which
+   * is why its bottom edge sits inside their inset rather than on it.
+   */
+  shutterSize: 68,
+  shutterPadding: 4,
+  /** The ‹, ⋯ and the two options that unfold from ⋯ — the ‹ button's size. */
+  optionSize: 46,
+  optionIcon: 22,
+  /** Gap between stacked options once the ⋯ has unfolded. */
+  optionGap: 10,
+  /**
+   * How small an option starts, as a fraction of its size, when it comes out
+   * of the ⋯ button. Not zero: glass at zero size has nothing to refract, so
+   * the first frames would be a hole rather than a small button.
+   */
+  optionStartScale: 0.35,
+  /** JPEG quality handed to `takePictureAsync`. */
+  quality: 0.85,
+} as const;
+
 /**
  * Opacity is the only thing here still driven by a curve. A quart-out spends
  * the back half of its timeline covering six percent of the distance — that
