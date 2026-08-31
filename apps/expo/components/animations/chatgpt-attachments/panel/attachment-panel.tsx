@@ -17,6 +17,7 @@ import {
   mix,
   PANEL_CONTENT,
   PLUS_CENTER_X,
+  sheetTopFromComposerBottom,
 } from '../constants';
 import { PanelMaterial } from '../glass';
 
@@ -94,7 +95,7 @@ export function AttachmentPanel({
   const rect = useDerivedValue(() => {
     const bottom = composerBottom.get();
     const plusCenter = bottom - COMPOSER.rowHeight / 2;
-    const top = plusCenter + MENU.centerOffset - MENU_HEIGHT / 2;
+    const top = sheetTopFromComposerBottom(bottom);
 
     // Left edge never moves: menu and sheet share the composer's gutter. So
     // does the bottom edge once the sheet is open — it stops a gutter short of

@@ -336,6 +336,18 @@ export const PANEL_CONTENT = {
   transformOrigin: 'top left',
 } as const satisfies ViewStyle;
 
+/**
+ * Window Y of the sheet's top edge, given the composer's bottom. The panel is
+ * anchored to the + button's centre — half a row above the composer's bottom —
+ * shifted down by the menu's measured offset and up by half the menu's height.
+ * The panel, the grid's layout and the flights all have to agree on this line,
+ * so it is computed in exactly one place.
+ */
+export function sheetTopFromComposerBottom(bottom: number) {
+  'worklet';
+  return bottom - COMPOSER.rowHeight / 2 + MENU.centerOffset - MENU_HEIGHT / 2;
+}
+
 /** A rect. Window coordinates unless the field it sits on says otherwise. */
 export interface Frame {
   x: number;
