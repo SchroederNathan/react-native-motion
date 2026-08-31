@@ -1,7 +1,8 @@
 import { CameraView, useCameraPermissions, type CameraType, type FlashMode } from 'expo-camera';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { CAMERA, COLORS } from './constants';
+import { StyleSheet, View } from 'react-native';
+import { CAMERA, COLORS, PANEL_CONTENT } from '../constants';
+import { SheetPlaceholder } from '../panel/sheet-placeholder';
 
 export interface CameraSheetHandle {
   /**
@@ -88,13 +89,11 @@ export const CameraSheet = forwardRef<CameraSheetHandle, CameraSheetProps>(funct
           style={[StyleSheet.absoluteFill, lifting && styles.lifted]}
         />
       ) : (
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderText}>
-            {permission && !permission.canAskAgain
-              ? 'Camera access is off. Turn it on in Settings to try this demo.'
-              : 'Waiting for camera access…'}
-          </Text>
-        </View>
+        <SheetPlaceholder>
+          {permission && !permission.canAskAgain
+            ? 'Camera access is off. Turn it on in Settings to try this demo.'
+            : 'Waiting for camera access…'}
+        </SheetPlaceholder>
       )}
     </View>
   );
@@ -102,26 +101,12 @@ export const CameraSheet = forwardRef<CameraSheetHandle, CameraSheetProps>(funct
 
 const styles = StyleSheet.create({
   root: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    transformOrigin: 'top left',
+    ...PANEL_CONTENT,
     // Black rather than the panel's material: a camera preview starts a frame
     // or two after it mounts, and the reference shows black there, not glass.
     backgroundColor: COLORS.background,
   },
   lifted: {
     opacity: 0,
-  },
-  placeholder: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 48,
-  },
-  placeholderText: {
-    color: COLORS.placeholder,
-    fontSize: 15,
-    textAlign: 'center',
   },
 });

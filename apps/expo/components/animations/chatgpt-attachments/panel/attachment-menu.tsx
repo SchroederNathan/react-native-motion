@@ -1,6 +1,6 @@
 import { Icon } from '@/components/icon';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { COLORS, MENU, MENU_HEIGHT } from './constants';
+import { COLORS, MENU, MENU_HEIGHT, PANEL_CONTENT } from '../constants';
 
 export type MenuAction = 'camera' | 'photos' | 'files' | 'plugins' | 'think';
 
@@ -50,13 +50,10 @@ export function AttachmentMenu({ onSelect }: AttachmentMenuProps) {
 
 const styles = StyleSheet.create({
   root: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
+    ...PANEL_CONTENT,
     width: MENU.width,
     height: MENU_HEIGHT,
     paddingVertical: MENU.paddingVertical,
-    transformOrigin: 'top left',
   },
   row: {
     height: MENU.itemHeight,

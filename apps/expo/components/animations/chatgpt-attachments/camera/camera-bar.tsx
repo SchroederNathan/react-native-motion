@@ -11,8 +11,9 @@ import Animated, {
   withSpring,
   type SharedValue,
 } from 'react-native-reanimated';
-import { BOTTOM_BAR, CAMERA, COLORS, DURATION, GUTTER, SPRING } from './constants';
-import { Glass } from './glass';
+import { BOTTOM_BAR, CAMERA, COLORS, DURATION, SPRING } from '../constants';
+import { Glass } from '../glass';
+import { SheetBar } from '../panel/sheet-bar';
 
 interface OptionProps {
   /** 1 for the option directly above ⋯, 2 for the one above that. */
@@ -37,7 +38,7 @@ interface OptionProps {
  * native ramp, since its opacity can't be animated.
  */
 function Option({ index, label, icon, unfold, active, fade, onPress }: OptionProps) {
-  const rise = index * (CAMERA.optionSize + CAMERA.optionGap);
+  const rise = index * (BOTTOM_BAR.controlSize + CAMERA.optionGap);
 
   const style = useAnimatedStyle(() => {
     const u = unfold.get();
@@ -68,7 +69,7 @@ function Option({ index, label, icon, unfold, active, fade, onPress }: OptionPro
     <Animated.View pointerEvents={active ? 'auto' : 'none'} style={[styles.option, style]}>
       <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
         <Glass
-          radius={CAMERA.optionSize / 2}
+          radius={BOTTOM_BAR.controlSize / 2}
           active={active}
           duration={DURATION.crossfade / 1000}
           style={styles.round}
@@ -86,11 +87,7 @@ interface CameraBarProps {
   width: number;
   /** Whether the controls are wearing their glass and taking touches. */
   active: boolean;
-  /**
-   * Fades the glyphs with the sheet. The glass itself can't be faded, but
-   * anything drawn inside it can, which is how these arrive and leave with the
-   * rest of the camera.
-   */
+  /** Fades the glyphs with the sheet — see `SheetBar`. */
   fade: SharedValue<number>;
   flash: FlashMode;
   onBack: () => void;
@@ -100,14 +97,8 @@ interface CameraBarProps {
 }
 
 /**
- * The ‹ button, the shutter and the ⋯ button that float over the camera, on
- * the same line and the same inset as the grid's controls.
- *
- * Not part of `CameraSheet`, and not part of the panel either — these are
- * glass, and the sheet's whole subtree has its opacity animated through the
- * morph, which would leave them rendering as nothing. Nothing in here clips,
- * for the same reason nothing in `PhotoGridBar` does: a glass control draws its
- * rim and its press bulge outside its own bounds.
+ * The shutter and the ⋯ button that float over the camera, on the `SheetBar`
+ * the grid's controls share — same line, same inset, same ‹ button.
  *
  * The ⋯ unfolds two options straight up out of itself — flip, then flash — on
  * the panel's own springs: `SPRING.panel` out, with its bounce, and
@@ -150,20 +141,7 @@ export function CameraBar({
   });
 
   return (
-    <View pointerEvents={active ? 'box-none' : 'none'} style={[styles.bar, { width }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to menu" onPress={onBack}>
-        <Glass
-          radius={CAMERA.optionSize / 2}
-          active={active}
-          duration={DURATION.crossfade / 1000}
-          style={styles.round}
-        >
-          <Animated.View style={contentStyle}>
-            <Icon name="chevron-left" size={BOTTOM_BAR.backIcon} color={COLORS.text} />
-          </Animated.View>
-        </Glass>
-      </Pressable>
-
+    <SheetBar width={width} active={active} fade={fade} onBack={onBack}>
       {/* The shutter: a glass ring with a white disc set into it. The disc is a
           child of the material, so it fades with the sheet the way every other
           glyph here does, while the ring switches its material natively. */}
@@ -210,7 +188,7 @@ export function CameraBar({
           onPress={toggleOptions}
         >
           <Glass
-            radius={CAMERA.optionSize / 2}
+            radius={BOTTOM_BAR.controlSize / 2}
             active={active}
             duration={DURATION.crossfade / 1000}
             style={styles.round}
@@ -224,26 +202,14 @@ export function CameraBar({
           </Glass>
         </Pressable>
       </View>
-    </View>
+    </SheetBar>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
-    position: 'absolute',
-    // The same line and inset as the grid's bar: inside the sheet's edges, the
-    // sheet stopping a gutter short of the bottom of the screen.
-    left: GUTTER,
-    bottom: GUTTER + BOTTOM_BAR.inset,
-    height: CAMERA.optionSize,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: BOTTOM_BAR.inset,
-  },
   round: {
-    width: CAMERA.optionSize,
-    height: CAMERA.optionSize,
+    width: BOTTOM_BAR.controlSize,
+    height: BOTTOM_BAR.controlSize,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -256,7 +222,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: (CAMERA.optionSize - CAMERA.shutterSize) / 2,
+    top: (BOTTOM_BAR.controlSize - CAMERA.shutterSize) / 2,
     alignItems: 'center',
   },
   shutter: {
@@ -272,8 +238,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.text,
   },
   more: {
-    width: CAMERA.optionSize,
-    height: CAMERA.optionSize,
+    width: BOTTOM_BAR.controlSize,
+    height: BOTTOM_BAR.controlSize,
   },
   option: {
     // Over the ⋯ exactly; `unfold` is what moves it off.

@@ -2,14 +2,15 @@ import { Image } from 'expo-image';
 import { StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, type SharedValue } from 'react-native-reanimated';
 import {
+  COLORS,
   COMPOSER,
   COMPOSER_STRIP_HEIGHT,
   GRID,
   GUTTER,
   mix,
   type Frame,
-} from './constants';
-import type { LibraryPhoto } from './use-photo-library';
+} from '../constants';
+import type { LibraryPhoto } from '../photos/use-photo-library';
 
 export interface Flight {
   photo: LibraryPhoto;
@@ -130,6 +131,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     overflow: 'hidden',
     borderCurve: 'continuous',
-    backgroundColor: '#141414',
+    backgroundColor: COLORS.photoFill,
   },
 });

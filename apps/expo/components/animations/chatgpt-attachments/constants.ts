@@ -1,3 +1,4 @@
+import type { ViewStyle } from 'react-native';
 import { Easing } from 'react-native-reanimated';
 
 /**
@@ -40,6 +41,12 @@ export const COLORS = {
    * through. This is that measurement as an opaque fill.
    */
   materialFlat: '#1E1E1E',
+  /**
+   * Fill behind a photo for the frames before it decodes — worn by the grid's
+   * cells, the composer's thumbnails and the flying copies alike, so a photo
+   * changing hands never changes what shows through it.
+   */
+  photoFill: '#141414',
 } as const;
 
 export const COMPOSER = {
@@ -146,8 +153,6 @@ export const GRID = {
   badgeRing: 2,
   badgeInset: 4,
   badgeLabelSize: 14,
-  /** How many library assets to pull in. */
-  pageSize: 180,
 } as const;
 
 export const BOTTOM_BAR = {
@@ -162,7 +167,11 @@ export const BOTTOM_BAR = {
    * indicator, which would push it out by however much the device inset is.
    */
   inset: 25,
-  backSize: 46,
+  /**
+   * Diameter of the round glass controls in the bar: the ‹ button on both
+   * sheets, and the ⋯ and the options that unfold from it on the camera's.
+   */
+  controlSize: 46,
   backIcon: 22,
   pillHeight: 43,
   pillPaddingHorizontal: 22,
@@ -179,8 +188,6 @@ export const CAMERA = {
    */
   shutterSize: 68,
   shutterPadding: 4,
-  /** The ‹, ⋯ and the two options that unfold from ⋯ — the ‹ button's size. */
-  optionSize: 46,
   optionIcon: 22,
   /** Gap between stacked options once the ⋯ has unfolded. */
   optionGap: 10,
@@ -315,6 +322,19 @@ export const DURATION = {
    */
   plusLead: 30,
 } as const;
+
+/**
+ * The layout contract between the panel and everything it shows. The menu, the
+ * grid and the camera are all laid out at their own natural size, anchored to
+ * the panel's top-left corner, and scaled from there through the morph — so
+ * each of their roots wears this, and none of them carries transition logic.
+ */
+export const PANEL_CONTENT = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  transformOrigin: 'top left',
+} as const satisfies ViewStyle;
 
 /** A rect. Window coordinates unless the field it sits on says otherwise. */
 export interface Frame {

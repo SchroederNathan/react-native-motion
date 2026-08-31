@@ -19,9 +19,9 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { COLORS, COMPOSER, COMPOSER_STRIP_HEIGHT, DURATION, GUTTER } from './constants';
-import { Glass } from './glass';
-import type { LibraryPhoto } from './use-photo-library';
+import { COLORS, COMPOSER, COMPOSER_STRIP_HEIGHT, DURATION, GUTTER } from '../constants';
+import { Glass } from '../glass';
+import type { LibraryPhoto } from '../photos/use-photo-library';
 
 interface ThumbnailProps {
   photo: LibraryPhoto;
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderRadius: COMPOSER.thumbRadius,
     borderCurve: 'continuous',
     overflow: 'hidden',
-    backgroundColor: '#141414',
+    backgroundColor: COLORS.photoFill,
   },
   thumbHidden: {
     opacity: 0,

@@ -15,9 +15,10 @@ import {
   MENU,
   MENU_HEIGHT,
   mix,
+  PANEL_CONTENT,
   PLUS_CENTER_X,
-} from './constants';
-import { PanelMaterial } from './glass';
+} from '../constants';
+import { PanelMaterial } from '../glass';
 
 export interface PanelDrivers {
   /** 0 the circle around the + button → 1 the menu at rest. */
@@ -214,9 +215,6 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
   },
   content: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    transformOrigin: 'top left',
+    ...PANEL_CONTENT,
   },
 });

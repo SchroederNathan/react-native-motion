@@ -6,7 +6,9 @@ import {
   type PermissionResponse,
 } from 'expo-media-library';
 import { useCallback, useEffect, useState } from 'react';
-import { GRID } from './constants';
+
+/** How many library assets to pull in. */
+const PAGE_SIZE = 180;
 
 export interface LibraryPhoto {
   /**
@@ -45,7 +47,7 @@ export function usePhotoLibrary(): PhotoLibrary {
       const assets = await new Query()
         .eq(AssetField.MEDIA_TYPE, MediaType.IMAGE)
         .orderBy({ key: AssetField.CREATION_TIME, ascending: false })
-        .limit(GRID.pageSize)
+        .limit(PAGE_SIZE)
         .exeForMetadata();
 
       setPhotos(assets.map((asset) => ({ id: asset.id })));

@@ -28,12 +28,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
-import { AttachmentFlight, type Flight } from './attachment-flight';
-import { AttachmentMenu, type MenuAction } from './attachment-menu';
-import { AttachmentPanel } from './attachment-panel';
-import { CameraBar } from './camera-bar';
-import { CameraSheet, type CameraSheetHandle } from './camera-sheet';
-import { Composer } from './composer';
+import { CameraBar } from './camera/camera-bar';
+import { CameraSheet, type CameraSheetHandle } from './camera/camera-sheet';
+import { AttachmentFlight, type Flight } from './composer/attachment-flight';
+import { Composer } from './composer/composer';
 import {
   COLORS,
   COMPOSER,
@@ -46,9 +44,12 @@ import {
   MENU_HEIGHT,
   SPRING,
 } from './constants';
-import { PhotoGrid, PhotoGridBar, type PhotoGridHandle } from './photo-grid';
+import { AttachmentMenu, type MenuAction } from './panel/attachment-menu';
+import { AttachmentPanel } from './panel/attachment-panel';
+import { PhotoGridBar } from './photos/photo-grid-bar';
+import { PhotoGrid, type PhotoGridHandle } from './photos/photo-grid';
+import { usePhotoLibrary, type LibraryPhoto } from './photos/use-photo-library';
 import { chatgptAttachmentsTheme } from './theme';
-import { usePhotoLibrary, type LibraryPhoto } from './use-photo-library';
 
 type Mode = 'closed' | 'menu' | 'photos' | 'camera';
 
