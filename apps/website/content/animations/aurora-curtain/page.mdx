@@ -8,12 +8,12 @@ export const meta = {
 
 ## Overview
 
-A **single fragment shader** paints the whole thing: a curtain of violet light draped over the top of the screen, nine overlapping rays swinging as if in a slow breeze. React's only job is to feed it three uniforms, so nothing on the JS side ever animates a view.
+A single fragment shader paints the whole thing: a curtain of violet light draped over the top of the screen, nine overlapping rays swinging as if in a slow breeze. React's only job is to feed it three uniforms, so nothing on the JS side ever animates a view.
 
-- **The lean is a time lag, not a drawn slant**: every ray reads its swing at a clock lagged by depth (`tw - ys * LAG`), so rays lean against their own drift while moving and straighten as they settle
-- **Nothing is periodic**: ray centres are scattered off the even lattice and widths vary widely, because evenly spaced rays read as vertical stripes
-- **The loop wraps invisibly**: every rate in the shader is a whole-number multiple of a 14-second master clock, driven by one linear, non-reversing `withRepeat`
-- **More curtain hides above the screen than shows**: dragging down is a ScrollView overscroll, so the hidden part follows the finger 1:1 and the rubber-band settle is the platform's own scroll physics
+- The lean is a time lag, not a drawn slant. Every ray reads its swing at a clock lagged by depth (`tw - ys * LAG`), so rays lean against their own drift while moving and straighten as they settle.
+- Nothing is periodic. Ray centres are scattered off the even lattice and widths vary widely, because evenly spaced rays read as vertical stripes.
+- The loop wraps invisibly. Every rate in the shader is a whole-number multiple of a 14-second master clock, driven by one linear, non-reversing `withRepeat`.
+- More curtain hides above the screen than shows. Dragging down is a ScrollView overscroll, so the hidden part follows the finger 1:1 and the rubber-band settle is the platform's own scroll physics.
 
 Every constant carries a note saying what was measured to pick it: the vertical falloff curve, the violet channel ordering, the gap darkness, the grain amplitude.
 
@@ -377,30 +377,30 @@ const styles = StyleSheet.create({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **Compile the shader once, at module scope, and check for null.** `Skia.RuntimeEffect.Make` returns `null` on a compile error rather than throwing. Render a plain backdrop in that case, and never call `Make` inside the component body where it would recompile on every render.
+- Compile the shader once, at module scope, and check for null. `Skia.RuntimeEffect.Make` returns `null` on a compile error rather than throwing. Render a plain backdrop in that case, and never call `Make` inside the component body where it would recompile on every render.
 
-- **The loop only wraps cleanly with `Easing.linear` and `reverse: false`.** Every rate in the shader advances a whole number of cycles per loop, which makes `u_t` jumping from 1 back to 0 invisible. An eased timing or a reversing repeat breaks that contract and puts a visible hitch at the wrap.
+- The loop only wraps cleanly with `Easing.linear` and `reverse: false`. Every rate in the shader advances a whole number of cycles per loop, which makes `u_t` jumping from 1 back to 0 invisible. An eased timing or a reversing repeat breaks that contract and puts a visible hitch at the wrap.
 
-- **Every animated rate must stay a whole-number multiple of the loop.** That includes the warped-clock offsets, each ray's swing pair, the breathe harmonics, the bob, and the tint drift. One fractional rate pops at the wrap. `LAG` is also expressed in loop time (4.0 / 14.0), so changing `LOOP_MS` means rescaling it.
+- Every animated rate must stay a whole-number multiple of the loop. That includes the warped-clock offsets, each ray's swing pair, the breathe harmonics, the bob, and the tint drift. One fractional rate pops at the wrap. `LAG` is also expressed in loop time (4.0 / 14.0), so changing `LOOP_MS` means rescaling it.
 
-- **Soft-compress the summed rays instead of clamping.** Nine overlapping rays routinely sum past 1.0. A clamp flattens overlaps into solid patches with no gradient left inside; `v / (1 + v)` rolls off asymptotically so overlaps still read brighter without hitting a ceiling.
+- Soft-compress the summed rays instead of clamping. Nine overlapping rays routinely sum past 1.0. A clamp flattens overlaps into solid patches with no gradient left inside; `v / (1 + v)` rolls off asymptotically so overlaps still read brighter without hitting a ceiling.
 
-- **The drag is a ScrollView overscroll, not a pan gesture.** An empty, transparent `Animated.ScrollView` sits over the canvas purely to produce negative `contentOffset.y`. It needs both `alwaysBounceVertical` and a `flexGrow: 1` content container, or an empty scroll view has nothing to bounce and the offset never goes negative.
+- The drag is a ScrollView overscroll, not a pan gesture. An empty, transparent `Animated.ScrollView` sits over the canvas purely to produce negative `contentOffset.y`. It needs both `alwaysBounceVertical` and a `flexGrow: 1` content container, or an empty scroll view has nothing to bounce and the offset never goes negative.
 
-- **Android reports no overscroll through `contentOffset`.** Its stretch/glow effect keeps the offset at 0, so the curtain stays put there and the effect degrades to the loop alone. Reach for a pan gesture with a spring if you need the drag on Android.
+- Android reports no overscroll through `contentOffset`. Its stretch/glow effect keeps the offset at 0, so the curtain stays put there and the effect degrades to the loop alone. Reach for a pan gesture with a spring if you need the drag on Android.
 
-- **Keep the pull clamp under the shader's `TOP`.** `MAX_PULL` (0.34) stays comfortably below `TOP` (0.5), and the shader additionally softens its own top edge, so no drag can expose a hard cut where the field ends.
+- Keep the pull clamp under the shader's `TOP`. `MAX_PULL` (0.34) stays comfortably below `TOP` (0.5), and the shader additionally softens its own top edge, so no drag can expose a hard cut where the field ends.
 
-- **Hash the grain on fixed cells, not per pixel.** The grain uses `hash(floor(fragCoord / 0.5))` because per-pixel noise averages away as soon as the screen is viewed below native resolution, while larger cells read as chunky blocks. Its amplitude (0.055) is calibrated, not decorative; it also dithers the low-alpha gradients that would otherwise band.
+- Hash the grain on fixed cells, not per pixel. The grain uses `hash(floor(fragCoord / 0.5))` because per-pixel noise averages away as soon as the screen is viewed below native resolution, while larger cells read as chunky blocks. Its amplitude (0.055) is calibrated, not decorative; it also dithers the low-alpha gradients that would otherwise band.
 
-- **The backdrop outside the canvas must match the one inside.** The shader composites onto `#0A0A0A` (`BACKDROP`), and `GAIN` was fitted against that composited result. Paint the host screen the same color, or you get seams where the canvas ends and a brightness that no longer matches the calibration.
+- The backdrop outside the canvas must match the one inside. The shader composites onto `#0A0A0A` (`BACKDROP`), and `GAIN` was fitted against that composited result. Paint the host screen the same color, or you get seams where the canvas ends and a brightness that no longer matches the calibration.
 
-- **Feed uniforms as one `useDerivedValue` object, straight into `<Shader>`.** React Native Skia accepts a derived value for `uniforms`, so both the loop phase and the drag update on the UI thread with no `useAnimatedProps` and no re-renders.
+- Feed uniforms as one `useDerivedValue` object, straight into `<Shader>`. React Native Skia accepts a derived value for `uniforms`, so both the loop phase and the drag update on the UI thread with no `useAnimatedProps` and no re-renders.
 
-- **Cancel the infinite repeat on cleanup.** `withRepeat(..., -1)` runs until told otherwise. Cancel it when the component unmounts, and inside a navigator drive it from a focus effect so an off-screen route is not still animating.
+- Cancel the infinite repeat on cleanup. `withRepeat(..., -1)` runs until told otherwise. Cancel it when the component unmounts, and inside a navigator drive it from a focus effect so an off-screen route is not still animating.
 
-- **Respect reduced motion.** `useReducedMotion` skips the loop entirely and parks the phase on a static frame (0.18) instead of animating.
+- Respect reduced motion. `useReducedMotion` skips the loop entirely and parks the phase on a static frame (0.18) instead of animating.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility.

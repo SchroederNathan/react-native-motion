@@ -8,7 +8,7 @@ export const meta = {
 
 ## Overview
 
-A **long-press radial menu** from the touch point: blur dims the screen, the pressed card clones into the overlay, and circular actions spring out. Buttons scale with proximity and shift aside from the finger. Release on a button to select (haptics). Fan angles adjust so actions stay clear of the screen edges.
+A long-press radial menu that opens from the touch point. Blur dims the screen, the pressed card clones into the overlay, and circular actions spring out. Buttons grow as the finger nears and shift aside so it never covers them. Release on a button to select it, with a haptic tick. Fan angles adjust so actions stay clear of the screen edges.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'expo-blur', 'expo-haptics', 'expo-image']} />
 
@@ -559,24 +559,24 @@ export function RadialMenu({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **Use `Gesture.Simultaneous()` to compose long press and pan.** The long press detects activation, the pan tracks movement. Using `Gesture.Race()` between them would kill the pan once the long press ends.
+- Use `Gesture.Simultaneous()` to compose long press and pan. The long press detects activation, the pan tracks movement. Using `Gesture.Race()` between them would kill the pan once the long press ends.
 
-- **`activateAfterLongPress` on the pan gesture must match the long press duration.** If they differ, the pan either activates too early (breaking scroll) or too late (missing finger movement).
+- `activateAfterLongPress` on the pan gesture must match the long press duration. If they differ, the pan either activates too early (breaking scroll) or too late (missing finger movement).
 
-- **Increment `releaseSignal` instead of toggling it.** A boolean toggle can miss changes if the gesture ends and restarts in the same frame.
+- Increment `releaseSignal` instead of toggling it. A boolean toggle can miss changes if the gesture ends and restarts in the same frame.
 
-- **Guard haptics with `lastHapticId`.** Without it, `Haptics.selectionAsync()` fires every frame the cursor is over a button, causing a constant buzz.
+- Guard haptics with `lastHapticId`. Without it, `Haptics.selectionAsync()` fires every frame the cursor is over a button, causing a constant buzz.
 
-- **`measureInWindow` is async and runs on the JS thread.** You cannot call it from a worklet. Use `runOnJS` to bridge from the long press `onStart` to the JS callback.
+- `measureInWindow` is async and runs on the JS thread. You cannot call it from a worklet. Use `runOnJS` to bridge from the long press `onStart` to the JS callback.
 
-- **Blur overlay must use `Animated.createAnimatedComponent(BlurView)`** to animate the `intensity` prop. Regular `BlurView` with state-driven intensity causes re-renders and flicker.
+- Blur overlay must use `Animated.createAnimatedComponent(BlurView)` to animate the `intensity` prop. Regular `BlurView` with state-driven intensity causes re-renders and flicker.
 
-- **Button size is animated via `width`/`height`** for the proximity effect. `transform: [{ scale }]` doesn't affect hit areas. Acceptable because button count is small (3-5) and the menu is short-lived.
+- Button size is animated via `width`/`height` for the proximity effect. `transform: [{ scale }]` doesn't affect hit areas. Acceptable because button count is small (3-5) and the menu is short-lived.
 
-- **Use `withSpring` with high damping (80+) for button entrance.** Low damping causes buttons to oscillate past their targets.
+- Use `withSpring` with high damping (80+) for button entrance. Low damping causes buttons to oscillate past their targets.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility.
 
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers.
+- Use `scheduleOnRN` from `react-native-worklets` instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers.

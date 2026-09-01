@@ -8,14 +8,14 @@ export const meta = {
 
 ## Overview
 
-A **character-diffing text swap**. When the string changes, letters the two phrases share keep their identity and **glide** to their new position; the rest **blur out and blur in**, staggered left to right.
+A character-diffing text swap. When the string changes, letters the two phrases share keep their identity and glide to their new position; the rest blur out and blur in, staggered left to right.
 
-Every glyph is drawn as its own Skia `Group` so it can carry a real Gaussian blur. `Animated.Text` cannot do that — this is the reason to reach for Skia here rather than animating native text views.
+Every glyph is drawn as its own Skia `Group` so it can carry a real Gaussian blur. `Animated.Text` cannot do that, and it is the whole reason to reach for Skia here rather than animating native text views.
 
-- **Identity by occurrence**: each character is keyed `` `${char}#${nthOccurrence}` ``, so the second `e` in a phrase reconciles to the same glyph across a swap
-- **Layout from glyph advances**: positions come from `font.getGlyphWidths(font.getGlyphIDs(text))`, not measured text bounds
-- **Interruption-safe**: each glyph is a retargetable state machine, so tapping faster than the animation completes never strands a letter
-- **Auto-fitting type**: the size is fitted once to the widest phrase, so the type does not resize as the text changes
+- Each character is keyed `` `${char}#${nthOccurrence}` ``, so the second `e` in a phrase reconciles to the same glyph across a swap.
+- Positions come from `font.getGlyphWidths(font.getGlyphIDs(text))`, not measured text bounds.
+- Each glyph is a retargetable state machine, so tapping faster than the animation completes never strands a letter.
+- The type size is fitted once to the widest phrase, so nothing resizes as the text changes.
 
 <Installer packages={['@shopify/react-native-skia', 'react-native-reanimated', 'react-native-worklets']} />
 
@@ -397,28 +397,28 @@ export function MorphingText({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **Never run the enter animation on mount only.** `useEffect(..., [])` is the single biggest trap here. A glyph caught mid-exit that reappears in the next phrase is *reused* by React (same key), so it never remounts — it just sits at `opacity: 0` while still holding its layout slot. The text renders with gaps, and it looks like dropped frames rather than a bug. Drive the animation off a phase flip instead.
+- Never run the enter animation on mount only. `useEffect(..., [])` is the single biggest trap here. A glyph caught mid-exit that reappears in the next phrase is *reused* by React (same key), so it never remounts. It just sits at `opacity: 0` while still holding its layout slot. The text renders with gaps, and it looks like dropped frames rather than a bug. Drive the animation off a phase flip instead.
 
-- **Do not remove exited glyphs with `setTimeout`.** A pending timer keyed to a glyph will happily fire after that letter has come back and delete something visible. Use the exit animation's own completion callback, and guard the removal: only drop the cell if it is *still* in the exit phase.
+- Do not remove exited glyphs with `setTimeout`. A pending timer keyed to a glyph will happily fire after that letter has come back and delete something visible. Use the exit animation's own completion callback, and guard the removal: only drop the cell if it is *still* in the exit phase.
 
-- **Carry in-flight exiting glyphs forward, by reference.** When the text changes again mid-exit, rebuild the list so previously-exiting cells survive — and reuse the same object so `memo` bails out and their animation is not restarted. Rebuilding them fresh restarts the exit from the top every keystroke.
+- Carry in-flight exiting glyphs forward, by reference. When the text changes again mid-exit, rebuild the list so previously-exiting cells survive, and reuse the same object so `memo` bails out and their animation is not restarted. Rebuilding them fresh restarts the exit from the top every keystroke.
 
-- **Guard the phase effect against index-only changes.** A surviving glyph's index changes on almost every swap because letters move. Without a guard, every persisting glyph restarts its enter animation toward the value it already holds — pure wasted animation work on the UI thread.
+- Guard the phase effect against index-only changes. A surviving glyph's index changes on almost every swap because letters move. Without a guard, every persisting glyph restarts its enter animation toward the value it already holds, pure wasted work on the UI thread.
 
-- **Skia needs the font file, not a family name.** Use whatever typeface you want, but `useFont` takes a required asset module — `require('./YourFont.otf')`. A family name registered with `expo-font` is invisible to Skia, so `fontFamily: 'YourFont'` silently renders nothing. If you would rather not bundle a file, `@expo-google-fonts/*` packages already export a `require`d `.ttf` you can pass straight through.
+- Skia needs the font file, not a family name. Use whatever typeface you want, but `useFont` takes a required asset module like `require('./YourFont.otf')`. A family name registered with `expo-font` is invisible to Skia, so `fontFamily: 'YourFont'` silently renders nothing. If you would rather not bundle a file, `@expo-google-fonts/*` packages already export a `require`d `.ttf` you can pass straight through.
 
-- **Use glyph advances, not text bounds.** `font.getGlyphWidths(font.getGlyphIDs(text))` gives true advance widths. Tight bounds drop trailing spaces and side bearings, so spacing drifts and centring is off.
+- Use glyph advances, not text bounds. `font.getGlyphWidths(font.getGlyphIDs(text))` gives true advance widths. Tight bounds drop trailing spaces and side bearings, so spacing drifts and centring is off.
 
-- **Advances are indexed per character, so keep strings ASCII.** `[...text]` splits by code point; a multi-codepoint grapheme or emoji desynchronises the two arrays and the layout falls apart. Spaces are fine — they carry a real advance and draw nothing.
+- Advances are indexed per character, so keep strings ASCII. `[...text]` splits by code point; a multi-codepoint grapheme or emoji desynchronises the two arrays and the layout falls apart. Spaces are fine; they carry a real advance and draw nothing.
 
-- **Character keys are case-sensitive.** `D` and `d` are different glyphs, so a capitalised phrase shares nothing with a lowercase one and everything blurs instead of gliding. Keep the set in one case if you want the glide to read.
+- Character keys are case-sensitive. `D` and `d` are different glyphs, so a capitalised phrase shares nothing with a lowercase one and everything blurs instead of gliding. Keep the set in one case if you want the glide to read.
 
-- **Skia's transform origin is the top-left, not the centre.** Pass `origin` so each glyph scales around its own middle rather than pivoting off the baseline.
+- Skia's transform origin is the top-left, not the centre. Pass `origin` so each glyph scales around its own middle rather than pivoting off the baseline.
 
-- **Fit the type to the widest phrase, not the current one.** Sizing per string makes the type jump between phrases. Measure every candidate once and pick one size.
+- Fit the type to the widest phrase, not the current one. Sizing per string makes the type jump between phrases. Measure every candidate once and pick one size.
 
-- **Use `scheduleOnRN` from `react-native-worklets`**, not the removed `runOnJS`, when calling back into JS from an animation callback.
+- Use `scheduleOnRN` from `react-native-worklets`, not the removed `runOnJS`, when calling back into JS from an animation callback.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value`, for React Compiler compatibility.
+- Use `.get()` and `.set()` on shared values instead of `.value`, for React Compiler compatibility.

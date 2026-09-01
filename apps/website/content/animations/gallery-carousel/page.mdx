@@ -8,7 +8,7 @@ export const meta = {
 
 ## Overview
 
-A **stacked card carousel** plus **blurred backdrop crossfade**. On index 0 the cards sit in a fanned deck; the first swipe blends them into a centered carousel. The backdrop crossfades blurred images to the active card.
+A stacked card carousel with a blurred backdrop that follows it. On index 0 the cards sit in a fanned deck; the first swipe blends them into a centered carousel. Behind the cards, the backdrop crossfades to a blurred copy of whichever image is active.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-blur', 'expo-image', 'expo-linear-gradient', '@react-native-masked-view/masked-view']} />
 
@@ -346,22 +346,22 @@ const styles = StyleSheet.create({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **`galleryFactor` only spans index 0 to 1.** The stack-to-carousel blend is the first swipe; after index 1 you stay in full carousel. Don't widen the interpolation range.
+- `galleryFactor` only spans index 0 to 1. The stack-to-carousel blend is the first swipe; after index 1 you stay in full carousel. Don't widen the interpolation range.
 
-- **Cards must be `position: 'absolute'`** inside the carousel container, which needs an explicit `height` equal to `ITEM_HEIGHT`. Without absolute positioning, the stack layout won't work.
+- Cards must be `position: 'absolute'` inside the carousel container, which needs an explicit `height` equal to `ITEM_HEIGHT`. Without absolute positioning, the stack layout won't work.
 
-- **`zIndex` must be static, not animated.** Set `zIndex: totalItems - index` so card 0 is always on top. Animating zIndex based on activeIndex causes flicker.
+- `zIndex` must be static, not animated. Set `zIndex: totalItems - index` so card 0 is always on top. Animating zIndex based on activeIndex causes flicker.
 
-- **`BlurView` must be outside `MaskedView`.** If you put it inside, the blur effect gets clipped by the gradient mask and the bottom edge looks broken.
+- `BlurView` must be outside `MaskedView`. If you put it inside, the blur effect gets clipped by the gradient mask and the bottom edge looks broken.
 
-- **Prefetch adjacent backdrop images.** Without `Image.prefetch()`, the crossfade may start before the next image is loaded, causing a flash of blank space.
+- Prefetch adjacent backdrop images. Without `Image.prefetch()`, the crossfade may start before the next image is loaded, causing a flash of blank space.
 
-- **Velocity projection matters for feel.** The snap target is `activeIndex - velocityX / 1000`, then rounded. Without this, fast swipes only advance one card and feel sluggish.
+- Velocity projection matters for feel. The snap target is `activeIndex - velocityX / 1000`, then rounded. Without this, fast swipes only advance one card and feel sluggish.
 
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers or animation callbacks.
+- Use `scheduleOnRN` from `react-native-worklets` instead of the deprecated `runOnJS` when calling JS callbacks from gesture handlers or animation callbacks.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility.
 
-- **Always include `borderCurve: 'continuous'`** alongside `borderRadius` for smooth iOS-native corner curves.
+- Always include `borderCurve: 'continuous'` alongside `borderRadius` for smooth iOS-native corner curves.

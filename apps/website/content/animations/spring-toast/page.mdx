@@ -1,14 +1,14 @@
 export const meta = {
   title: 'Stack Toast',
   slug: 'spring-toast',
-  description: 'Stacking bottom toasts: each new one springs up and pushes the rest back a step, smaller behind smaller. The front toast follows the finger — rubber-banding upward, committing on a downward flick — and dismissing it springs the stack forward.',
+  description: 'Stacking bottom toasts: each new one springs up and pushes the rest back a step, smaller behind smaller. The front toast follows the finger, rubber-banding upward and committing on a downward flick. Dismissing it springs the stack forward.',
   video: '/videos/spring-toast.mp4',
   tags: ['toast', 'stack', 'spring', 'gesture', 'swipe-to-dismiss', 'haptics', 'notification'],
 }
 
 ## Overview
 
-A **stacking bottom toast**. Each new toast springs up from below the screen edge; the ones already there step up 14px and shrink 5% per slot. The front toast follows a downward drag and rubber-bands against an upward one. A drag past 56px, or a flick past 800 px/s, commits the dismiss with a light haptic, and the toasts behind spring forward. Every toast auto-dismisses after 3 seconds and carries an optional action button plus a close button.
+A stacking bottom toast. Each new toast springs up from below the screen edge; the ones already there step up 14px and shrink 5% per slot. The front toast follows a downward drag and rubber-bands against an upward one. A drag past 56px, or a flick past 800 px/s, commits the dismiss with a light haptic, and the toasts behind spring forward. Every toast auto-dismisses after 3 seconds and carries an optional action button plus a close button.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-haptics', 'react-native-safe-area-context', '@expo/vector-icons']} />
 
@@ -455,28 +455,28 @@ const styles = StyleSheet.create({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **Compute the stack index from live entries, not array position.** A toast's index is the count of non-exiting entries with a higher id: `toasts.filter((t) => !t.exiting && t.id > toast.id).length`. Ids only grow, so this is the distance from the front even after removals.
+- Compute the stack index from live entries, not array position. A toast's index is the count of non-exiting entries with a higher id: `toasts.filter((t) => !t.exiting && t.id > toast.id).length`. Ids only grow, so this is the distance from the front even after removals.
 
-- **Take a dismissing toast out of the stack before its fade finishes.** `onDismissStart` marks the entry `exiting` the moment the dismiss begins, so the toasts behind spring forward while it fades. Waiting for `onDismissed` would freeze the stack for the 160ms exit.
+- Take a dismissing toast out of the stack before its fade finishes. `onDismissStart` marks the entry `exiting` the moment the dismiss begins, so the toasts behind spring forward while it fades. Waiting for `onDismissed` would freeze the stack for the 160ms exit.
 
-- **Rubber-band upward drags instead of clamping.** `rubberBand` maps upward distance onto an asymptote near 40px, so the toast resists but still moves. Downward translation passes through raw, because down is the dismiss direction.
+- Rubber-band upward drags instead of clamping. `rubberBand` maps upward distance onto an asymptote near 40px, so the toast resists but still moves. Downward translation passes through raw, because down is the dismiss direction.
 
-- **Commit on distance or velocity.** A drag past 56px or a flick past 800 px/s both dismiss. Distance alone makes quick flicks feel dead.
+- Commit on distance or velocity. A drag past 56px or a flick past 800 px/s both dismiss. Distance alone makes quick flicks feel dead.
 
-- **Only the front toast takes the pan.** `.enabled(index === 0)` keeps the toasts behind as decoration; they are never under the finger.
+- Only the front toast takes the pan. `.enabled(index === 0)` keeps the toasts behind as decoration; they are never under the finger.
 
-- **Pause the auto-dismiss timer while the finger is down.** `onBegin` clears the timer so a held toast does not vanish. `onEnd` restarts it after a snap-back, and `onFinalize` restarts it when the gesture fails, so no path leaks a stopped timer.
+- Pause the auto-dismiss timer while the finger is down. `onBegin` clears the timer so a held toast does not vanish. `onEnd` restarts it after a snap-back, and `onFinalize` restarts it when the gesture fails, so no path leaks a stopped timer.
 
-- **Read the index through a ref inside the timer.** The 3-second timeout closes over the render it was scheduled in. `indexRef.current` gives the live position, so only a toast that is still at the front gets the 40px exit drop; a toast expiring behind the front fades in place.
+- Read the index through a ref inside the timer. The 3-second timeout closes over the render it was scheduled in. `indexRef.current` gives the live position, so only a toast that is still at the front gets the 40px exit drop; a toast expiring behind the front fades in place.
 
-- **Guard `dismiss` with an `exitingRef`.** Timeout, close button, and swipe can race. The first call wins; later ones return early.
+- Guard `dismiss` with an `exitingRef`. Timeout, close button, and swipe can race. The first call wins; later ones return early.
 
-- **The exit is a timing fade, not the entrance spring reversed.** Exit uses `withTiming` over 160ms with an ease-out bezier. A swipe dismiss keeps momentum by adding 80px past the release point; close and timeout drop the front toast 40px.
+- The exit is a timing fade, not the entrance spring reversed. Exit uses `withTiming` over 160ms with an ease-out bezier. A swipe dismiss keeps momentum by adding 80px past the release point; close and timeout drop the front toast 40px.
 
-- **Respect reduced motion.** With `useReducedMotion()` true, the entrance and stack values snap into place and the exit skips the drop. Opacity fades still run.
+- Respect reduced motion. With `useReducedMotion()` true, the entrance and stack values snap into place and the exit skips the drop. Opacity fades still run.
 
-- **Use `withSpring` with no config.** Entrance, stack shifts, and drag snap-back all pass just the target value.
+- Use `withSpring` with no config. Entrance, stack shifts, and drag snap-back all pass just the target value.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility, and **`scheduleOnRN` from `react-native-worklets`** instead of the deprecated `runOnJS` when calling JS callbacks from gestures and animation completions.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility, and `scheduleOnRN` from `react-native-worklets` instead of the deprecated `runOnJS` when calling JS callbacks from gestures and animation completions.

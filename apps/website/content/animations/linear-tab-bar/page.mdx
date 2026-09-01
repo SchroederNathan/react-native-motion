@@ -8,13 +8,13 @@ export const meta = {
 
 ## Overview
 
-A **glassmorphic tab bar** modeled on Linear's mobile app: a frosted-glass pill with tappable, swipeable tab icons. Drag up to open a full menu with staggered rows. The search control grows into a search bar while the pill collapses. Liquid glass stretch bends the pill when you drag past its edges; a radial glow tracks your finger.
+A glassmorphic tab bar modeled on Linear's mobile app: a frosted-glass pill with tappable, swipeable tab icons. Drag up to open a full menu with staggered rows. The search control grows into a search bar while the pill collapses. Liquid glass stretch bends the pill when you drag past its edges; a radial glow tracks your finger.
 
-- **Pill-to-menu morph**: Squeeze (scaleX dips around 15%), then height grows into the staggered menu
-- **Liquid glass stretch**: Overdrag uses damped stretch along the drag axis and slight squeeze across it
-- **Touch-tracking glow**: Radial SVG gradient at the finger, fades on release
-- **Search transition**: Pill width goes to zero as the search bar grows; close button slides in
-- **Staggered menu items**: Header, divider, and seven rows use 40ms stagger on open, reversed on close
+- The pill-to-menu morph squeezes first (scaleX dips around 15% progress), then the height grows into the staggered menu.
+- Overdrag stretches the glass along the drag axis with a damped curve and squeezes it slightly across it.
+- A radial SVG gradient sits under the finger and fades out on release.
+- In search mode the pill's width goes to zero as the search bar grows, and a close button slides in.
+- The header, divider, and seven menu rows stagger in at 40ms intervals, reversed on close.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-keyboard-controller', 'expo-blur', 'expo-haptics', 'expo-linear-gradient', 'react-native-svg', '@react-native-masked-view/masked-view', 'lucide-react-native', 'react-native-safe-area-context', 'react-native-worklets']} />
 
@@ -1643,26 +1643,26 @@ const closeStyles = StyleSheet.create({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **Use `Gesture.Simultaneous()` for long press + pan on the pill.** The long press handles touch-down state while the pan tracks drag movement. Using `Gesture.Race()` would kill the pan when the long press resolves.
+- Use `Gesture.Simultaneous()` for long press + pan on the pill. The long press handles touch-down state while the pan tracks drag movement. Using `Gesture.Race()` would kill the pan when the long press resolves.
 
-- **Use `Gesture.Race()` for the search button's tap + pan.** You need tap or pan, not both: tap toggles, pan drives the stretch.
+- Use `Gesture.Race()` for the search button's tap + pan. You need tap or pan, not both: tap toggles, pan drives the stretch.
 
-- **Guard menu/search mutual exclusion.** `toggleMenu` checks `searchProgress > 0.5` and vice versa. Without this, both modes can activate simultaneously.
+- Guard menu/search mutual exclusion. `toggleMenu` checks `searchProgress > 0.5` and vice versa. Without this, both modes can activate simultaneously.
 
-- **The liquid glass stretch uses damped overflow, not raw delta.** `dampedX = sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))` gives rubber-band resistance that levels off near MAX_PULL.
+- The liquid glass stretch uses damped overflow, not raw delta. `dampedX = sign * MAX_PULL * (1 - 1 / (|overflow| / MAX_PULL + 1))` gives rubber-band resistance that levels off near MAX_PULL.
 
-- **The pill-to-menu morph uses a non-linear scaleX curve.** It dips to 0.7 at 15% progress, recovers to 0.85 at 50%, and reaches 1.0 at 85%, which reads as squeeze-then-expand.
+- The pill-to-menu morph uses a non-linear scaleX curve. It dips to 0.7 at 15% progress, recovers to 0.85 at 50%, and reaches 1.0 at 85%, which reads as squeeze-then-expand.
 
-- **Menu items stagger in at 40ms intervals, out at 10ms.** The asymmetry makes the close feel snappier. Items stagger top-to-bottom on open and bottom-to-top on close.
+- Menu items stagger in at 40ms intervals, out at 10ms. The asymmetry makes the close feel snappier. Items stagger top-to-bottom on open and bottom-to-top on close.
 
-- **Use `scheduleOnRN` from `react-native-worklets`** instead of `runOnJS` for all JS callbacks from gesture handlers and worklets.
+- Use `scheduleOnRN` from `react-native-worklets` instead of `runOnJS` for all JS callbacks from gesture handlers and worklets.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility.
 
-- **`GlassMaterial` accepts both static and animated `borderRadius`.** It detects shared values via duck-typing (`typeof borderRadius === 'object' && 'get' in borderRadius`) and switches between static styles and `useAnimatedStyle` accordingly.
+- `GlassMaterial` accepts both static and animated `borderRadius`. It detects shared values via duck-typing (`typeof borderRadius === 'object' && 'get' in borderRadius`) and switches between static styles and `useAnimatedStyle` accordingly.
 
-- **The glow overlay uses a two-phase progress.** From 0 to 1 the glow sits on the touch; from 1 to 2 it fades while scaling up 4x for a release ripple.
+- The glow overlay uses a two-phase progress. From 0 to 1 the glow sits on the touch; from 1 to 2 it fades while scaling up 4x for a release ripple.
 
-- **Keyboard animation uses `react-native-keyboard-controller`.** `useReanimatedKeyboardAnimation` moves the tab bar with the keyboard so search stays usable.
+- Keyboard animation uses `react-native-keyboard-controller`. `useReanimatedKeyboardAnimation` moves the tab bar with the keyboard so search stays usable.

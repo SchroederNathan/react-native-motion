@@ -4,18 +4,18 @@ One glass panel opens out of the composer's + button, becomes a five-row menu, m
 
 The pieces:
 
-- `constants.ts` — measured geometry, springs, `sheetTopFromComposerBottom`, `mix`
-- `Glass.tsx` — `Glass` (controls) and `PanelMaterial` (the panel's surface), with fallbacks
-- `useSheetGeometry.ts` — keyboard-driven layout: `composerBottom`, grid size
-- `useAttachmentPanel.ts` — the panel's state machine and shared values
-- `useAttachmentFlights.ts` — attachments, flights, `attach` and `strip` shared values
-- `AttachmentPanel.tsx` — the morphing surface itself
-- `AttachmentMenu.tsx` — the five menu rows
-- `PhotoGrid.tsx` / `PhotoCell.tsx` — FlashList grid with `measureCell` and selection badges
-- `Composer.tsx` — the input bar: strip, + glyph, thumbnails
-- `AttachmentFlight.tsx` — the flying photo copies
-- `SheetBar.tsx` / `PhotoGridBar.tsx` / `CameraBar.tsx` — floating glass controls, outside the panel
-- `CameraSheet.tsx` — the camera preview in the grid's footprint
+- `constants.ts`: measured geometry, springs, `sheetTopFromComposerBottom`, `mix`
+- `Glass.tsx`: `Glass` (controls) and `PanelMaterial` (the panel's surface), with fallbacks
+- `useSheetGeometry.ts`: keyboard-driven layout, `composerBottom`, grid size
+- `useAttachmentPanel.ts`: the panel's state machine and shared values
+- `useAttachmentFlights.ts`: attachments, flights, `attach` and `strip` shared values
+- `AttachmentPanel.tsx`: the morphing surface itself
+- `AttachmentMenu.tsx`: the five menu rows
+- `PhotoGrid.tsx` / `PhotoCell.tsx`: FlashList grid with `measureCell` and selection badges
+- `Composer.tsx`: the input bar with strip, + glyph, and thumbnails
+- `AttachmentFlight.tsx`: the flying photo copies
+- `SheetBar.tsx` / `PhotoGridBar.tsx` / `CameraBar.tsx`: floating glass controls, outside the panel
+- `CameraSheet.tsx`: the camera preview in the grid's footprint
 
 ## Required packages
 
@@ -160,7 +160,7 @@ const openMenu = () => {
 }
 ```
 
-Dismiss reverses it on `SPRING.panelOut` (no bounce), sets `closing: true` so the material starts its own native fade, and delays `plusOut` by the same lead. The `open` spring's completion calls `closeSheet`, which unmounts the sheet and calls `KeyboardController.setFocusTo('current')` — tearing down the over-keyboard window otherwise drops the keyboard while the field stays logically focused, and it never comes back.
+Dismiss reverses it on `SPRING.panelOut` (no bounce), sets `closing: true` so the material starts its own native fade, and delays `plusOut` by the same lead. The `open` spring's completion calls `closeSheet`, which unmounts the sheet and calls `KeyboardController.setFocusTo('current')`. Tearing down the over-keyboard window otherwise drops the keyboard while the field stays logically focused, and it never comes back.
 
 Menu → sheet is one morph for both destinations (the camera takes the grid's exact footprint):
 
@@ -173,7 +173,7 @@ const showSheet = (next: Sheet) => {
 }
 ```
 
-`pulseBlur` softens then sharpens a blur layer inside the panel on every change (60ms up, 160ms down). `backToMenu` is `showSheet` in reverse. `collapseForLeave` / `resetAfterLeave` are the halves the flights drive: collapse without a completion callback, then reset everything once the flight lands (`plusOut` untouched — the + already came back on its own spring).
+`pulseBlur` softens then sharpens a blur layer inside the panel on every change (60ms up, 160ms down). `backToMenu` is `showSheet` in reverse. `collapseForLeave` / `resetAfterLeave` are the halves the flights drive: collapse without a completion callback, then reset everything once the flight lands (`plusOut` is untouched because the + already came back on its own spring).
 
 ## The morphing panel
 
@@ -205,7 +205,7 @@ const rect = useDerivedValue(() => {
 
 Layer order, all inside an absolutely positioned wrapper driven by `rect`:
 
-1. `PanelMaterial` with `StyleSheet.absoluteFill` plus an animated `borderRadius` — never clipped, never opacity-animated.
+1. `PanelMaterial` with `StyleSheet.absoluteFill` plus an animated `borderRadius`. Never clipped, never opacity-animated.
 2. A clipping sibling (`overflow: 'hidden'`, same animated radius) holding the menu wrapper, the grid wrapper, and the blur pulse layer.
 3. Each content wrapper carries its real size (`MENU.width × MENU_HEIGHT`, `gridWidth × gridHeight`) and scales by `rect.w / naturalWidth` from the top-left. Real size matters: iOS drops touches outside a view's bounds.
 
@@ -213,7 +213,7 @@ Every inner opacity is multiplied by `openFade = interpolate(open, [0.12, 0.6], 
 
 ## Menu and grid content
 
-`AttachmentMenu` is five plain pressable rows (Camera, Photos, Files, Plugins, Think harder) with no background — the panel owns the glass — and no size logic — the panel scales it. Its root wears `PANEL_CONTENT`.
+`AttachmentMenu` is five plain pressable rows (Camera, Photos, Files, Plugins, Think harder) with no background and no size logic; the panel owns the glass and the panel scales the rows. Its root wears `PANEL_CONTENT`.
 
 `PhotoGrid` is a 3-column FlashList at the sheet's full size. Critical props: `keyboardShouldPersistTaps="always"` and `keyboardDismissMode="none"` (the keyboard is up; without them the first tap dismisses instead of selecting). No background on the root, so the panel's material shows between cells. It exposes:
 
@@ -226,7 +226,7 @@ measureCell: (id) => {
 }
 ```
 
-`PhotoCell`: the image inset by `GRID.gap` on right/bottom with a 2pt radius (the hairline of sheet showing through is what separates photos), and a numbered blue badge that springs in — the photo itself never shrinks or dims on selection. A `lifted` cell renders at `opacity: 0`: cut, not faded, because its copy is flying out of that exact rect.
+`PhotoCell`: the image inset by `GRID.gap` on right/bottom with a 2pt radius (the hairline of sheet showing through is what separates photos), and a numbered blue badge that springs in. The photo itself never shrinks or dims on selection. A `lifted` cell renders at `opacity: 0`: cut, not faded, because its copy is flying out of that exact rect.
 
 Photos come from `expo-media-library`, newest first, via the query API; the asset id is already a loadable uri for `expo-image`.
 
@@ -242,7 +242,7 @@ The composer's bottom edge is pinned; attachments grow it upward, which keeps th
 
 ## Flights
 
-`useAttachmentFlights` owns `attach` (flight progress) and `strip` (slot position), plus the attachments array. `attachAndLeave(leaving)` sets the flights, appends the attachments (which opens the strip via an effect), calls the panel's `collapseForLeave`, and springs `attach` to 1. The completion schedules `settle()`, which clears flights, resets `attach`, and resets the panel in one synchronous block so React batches it into one commit — anything async in the middle double-exposes a photo.
+`useAttachmentFlights` owns `attach` (flight progress) and `strip` (slot position), plus the attachments array. `attachAndLeave(leaving)` sets the flights, appends the attachments (which opens the strip via an effect), calls the panel's `collapseForLeave`, and springs `attach` to 1. The completion schedules `settle()`, which clears flights, resets `attach`, and resets the panel in one synchronous block so React batches it into one commit. Anything async in the middle double-exposes a photo.
 
 `FlyingPhoto` interpolates its rect every frame, reading the still-moving strip live:
 
@@ -258,7 +258,7 @@ return {
 }
 ```
 
-The image uses `transition={0}` — it is the same decoded image the grid drew, handed over on the frame the cell hides.
+The image uses `transition={0}`. It is the same decoded image the grid drew, handed over on the frame the cell hides.
 
 Building the flights on confirm: read the sheet top from `composerBottom.get()` (the panel is at rest and fully morphed, so no measure pass), convert each `measureCell` result to window coordinates, and fall back to the middle of the sheet for a photo scrolled out of layout. Filter out photos already attached: the id is the strip's React key, and a duplicate key breaks the layout animations. A camera capture rides the same path with `from` set to the whole sheet's rect and `fromRadius: GRID.panelRadius`, while the preview is cut underneath it on the same frame.
 
@@ -273,7 +273,7 @@ The confirm pill ("All Photos" ⇄ "Add N photos") is one glass capsule, never f
 - Drive the crossfade through `useDerivedValue(() => withTiming(...))`, then multiply in the style. Multiplying a `withTiming` result directly inside `useAnimatedStyle` does arithmetic on an animation descriptor and produces NaN.
 - `fontVariant: ['tabular-nums']` on the label and the sizer, so the capsule only resizes when the count gains a digit.
 
-The camera bar's ⋯ unfolds two options (flip, flash) straight up out of itself on `SPRING.panel` / `SPRING.panelOut`, starting at scale 0.35 — glass at zero size has nothing to refract, so the first frames would be a hole. Option icon opacity is clamped; the scale is allowed to overshoot. The ⋯ crossfades to an ✕ with a quarter turn.
+The camera bar's ⋯ unfolds two options (flip, flash) straight up out of itself on `SPRING.panel` / `SPRING.panelOut`, starting at scale 0.35. Glass at zero size has nothing to refract, so the first frames would be a hole. Option icon opacity is clamped; the scale is allowed to overshoot. The ⋯ crossfades to an ✕ with a quarter turn.
 
 `CameraSheet` wears the grid's exact footprint, black background (a preview starts a frame or two after mount), `animateShutter={false}` (the flight is the shutter feedback), and `mirror` for the front camera.
 

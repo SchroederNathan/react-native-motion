@@ -1,21 +1,21 @@
 export const meta = {
   title: 'Attachment Menu',
   slug: 'chatgpt-attachments',
-  description: 'The ChatGPT media picker, rebuilt off a frame-by-frame reading of the real thing. One glass panel grows out of the + button, morphs into a full-bleed photo grid, and then shrinks into the composer carrying the photo you picked — the same surface the whole way through.',
+  description: 'The ChatGPT media picker, rebuilt off a frame-by-frame reading of the real thing. One glass panel grows out of the + button, morphs into a full-bleed photo grid, and then shrinks into the composer carrying the photo you picked. It is the same surface the whole way through.',
   video: '/videos/chatgpt-attachment.mp4',
   tags: ['menu', 'morph', 'glass', 'shared-element', 'photos', 'keyboard', 'ease-out'],
 }
 
 ## Overview
 
-A **single glass panel that is the whole interaction**. Tap + and a circle grows out of the button into a five-row menu. Pick Photos and the same surface morphs into a full-bleed photo grid. Confirm, and copies of the selected photos fly out of their grid cells into the composer while the panel collapses back into the +. Nothing hands off between views, so the material and the corners stay continuous through every shape.
+A single glass panel that is the whole interaction. Tap + and a circle grows out of the button into a five-row menu. Pick Photos and the same surface morphs into a full-bleed photo grid. Confirm, and copies of the selected photos fly out of their grid cells into the composer while the panel collapses back into the +. Nothing hands off between views, so the material and the corners stay continuous through every shape.
 
-- **One surface, three shapes**: the circle around the + (34pt), a 280pt menu, and the full-bleed grid. A derived rect mixes between them off two shared values, `open` and `morph`.
-- **Scaled content, not re-layout**: the menu and the grid are laid out at their natural size, anchored top-left, and scaled by the panel's width ratio through the morph.
-- **Shared-element flights**: each picked photo leaves the exact cell rect FlashList reports, and lands on a composer slot that is still rising as the strip opens.
-- **Real liquid glass**: `expo-glass-effect` on iOS 26, an `expo-blur` stand-in below it, and a flat measured color on Android, where a blur hosted over the keyboard has nothing to sample.
-- **Keyboard stays up**: the sheet lives in an `OverKeyboardView`, and every rect derives from the keyboard-tracked composer bottom.
-- **Camera rides the same panel**: the sheet morphs into a camera preview with the grid's exact footprint, and a capture leaves as the whole sheet, shrinking into its composer slot.
+- The surface has three shapes: the circle around the + (34pt), a 280pt menu, and the full-bleed grid. A derived rect mixes between them off two shared values, `open` and `morph`.
+- Content scales instead of re-laying out. The menu and the grid are laid out at their natural size, anchored top-left, and scaled by the panel's width ratio through the morph.
+- Each picked photo flies as a shared element. It leaves the exact cell rect FlashList reports and lands on a composer slot that is still rising as the strip opens.
+- The glass is real where it can be: `expo-glass-effect` on iOS 26, an `expo-blur` stand-in below it, and a flat measured color on Android, where a blur hosted over the keyboard has nothing to sample.
+- The keyboard stays up. The sheet lives in an `OverKeyboardView`, and every rect derives from the keyboard-tracked composer bottom.
+- The camera rides the same panel. The sheet morphs into a camera preview with the grid's exact footprint, and a capture leaves as the whole sheet, shrinking into its composer slot.
 
 <Installer packages={['react-native-reanimated', 'react-native-worklets', 'react-native-keyboard-controller', 'react-native-safe-area-context', 'expo-glass-effect', 'expo-blur', 'expo-image', 'expo-haptics', 'expo-media-library', 'expo-camera', '@shopify/flash-list']} />
 
@@ -1061,32 +1061,32 @@ const styles = StyleSheet.create({
 
 </CodePreviewer>
 
-## Common Pitfalls
+## Common pitfalls
 
-- **A `GlassView` under an animated opacity renders nothing at all, even at 1.** Every glass surface here mounts at fixed opacity and transitions natively instead: switch `glassEffectStyle` between `'regular'` and `'none'` with `animationDuration`. Start the first render at `'none'` so the transition has somewhere to come from.
+- A `GlassView` under an animated opacity renders nothing at all, even at 1. Every glass surface here mounts at fixed opacity and transitions natively instead: switch `glassEffectStyle` between `'regular'` and `'none'` with `animationDuration`. Start the first render at `'none'` so the transition has somewhere to come from.
 
-- **Never put `overflow: 'hidden'` on or above glass.** An interactive glass surface draws its rim and its press bulge outside its own bounds; a clip cuts both off and leaves a flat disc. The panel clips its contents in a sibling layer laid over the material, and the material rounds itself off an animated `borderRadius`.
+- Never put `overflow: 'hidden'` on or above glass. An interactive glass surface draws its rim and its press bulge outside its own bounds; a clip cuts both off and leaves a flat disc. The panel clips its contents in a sibling layer laid over the material, and the material rounds itself off an animated `borderRadius`.
 
-- **The panel's own opacity is never animated.** It carries the glass. Every layer inside multiplies its opacity by `openFade` instead, a clamped interpolation of `open` that starts at 0.12 so the circle reads as a circle before the rows arrive.
+- The panel's own opacity is never animated. It carries the glass. Every layer inside multiplies its opacity by `openFade` instead, a clamped interpolation of `open` that starts at 0.12 so the circle reads as a circle before the rows arrive.
 
-- **Content wrappers must carry their real size and scale by transform.** A zero-sized wrapper still paints its children, but iOS drops touches that land outside a view's bounds. The menu wrapper is 280×354pt, the grid wrapper is the grid's full size, and both scale from `transformOrigin: 'top left'`.
+- Content wrappers must carry their real size and scale by transform. A zero-sized wrapper still paints its children, but iOS drops touches that land outside a view's bounds. The menu wrapper is 280×354pt, the grid wrapper is the grid's full size, and both scale from `transformOrigin: 'top left'`.
 
-- **Faded-out layers still swallow taps.** The menu and the grid both stay mounted through the morph. Drive `pointerEvents` from an explicit `interactive: 'menu' | 'grid' | 'none'` prop, or the invisible menu intercepts every tap meant for the grid.
+- Faded-out layers still swallow taps. The menu and the grid both stay mounted through the morph. Drive `pointerEvents` from an explicit `interactive: 'menu' | 'grid' | 'none'` prop, or the invisible menu intercepts every tap meant for the grid.
 
-- **Host the sheet in `OverKeyboardView`.** The menu's bottom rows sit over the keyboard by design. On Android a `BlurView` samples its own window, and the over-keyboard window has nothing behind it, so the material falls back to the flat color it was measured at (`#1E1E1E`) instead of a blur.
+- Host the sheet in `OverKeyboardView`. The menu's bottom rows sit over the keyboard by design. On Android a `BlurView` samples its own window, and the over-keyboard window has nothing behind it, so the material falls back to the flat color it was measured at (`#1E1E1E`) instead of a blur.
 
-- **Tearing down the over-keyboard window drops the keyboard while the field stays logically focused.** A later tap on the field is then a no-op. Call `KeyboardController.setFocusTo('current')` as the sheet closes to keep the keyboard up.
+- Tearing down the over-keyboard window drops the keyboard while the field stays logically focused. A later tap on the field is then a no-op. Call `KeyboardController.setFocusTo('current')` as the sheet closes to keep the keyboard up.
 
-- **Set `keyboardShouldPersistTaps="always"` on the grid and the strip.** The keyboard is up the whole time. Without it, the scroll view treats the first tap as "dismiss the keyboard" and swallows it, so the photo never gets selected.
+- Set `keyboardShouldPersistTaps="always"` on the grid and the strip. The keyboard is up the whole time. Without it, the scroll view treats the first tap as "dismiss the keyboard" and swallows it, so the photo never gets selected.
 
-- **Hold the panel back for a 30ms lead while the + glyph slides out.** The panel opens as the circle around that glyph and is 14pt wider than it. There is no starting size at which the two do not overlap, so the panel stays unmounted, not small, until the lead ends.
+- Hold the panel back for a 30ms lead while the + glyph slides out. The panel opens as the circle around that glyph and is 14pt wider than it. There is no starting size at which the two do not overlap, so the panel stays unmounted, not small, until the lead ends.
 
-- **Cut the originals, never fade them.** The grid cell (or the camera preview) goes to `opacity: 0` on the frame its flying copy appears, and the copy renders with `transition={0}` on `expo-image`. Two copies of the same photo pulling apart is the one thing a shared element cannot show.
+- Cut the originals, never fade them. The grid cell (or the camera preview) goes to `opacity: 0` on the frame its flying copy appears, and the copy renders with `transition={0}` on `expo-image`. Two copies of the same photo pulling apart is the one thing a shared element cannot show.
 
-- **Read the landing slot live.** The composer strip opens on its own spring while the photo flies, so `FlyingPhoto` reads `strip.get()` inside `useAnimatedStyle` every frame. Interpolating toward a pre-computed end point lands the photo near the slot, not on it.
+- Read the landing slot live. The composer strip opens on its own spring while the photo flies, so `FlyingPhoto` reads `strip.get()` inside `useAnimatedStyle` every frame. Interpolating toward a pre-computed end point lands the photo near the slot, not on it.
 
-- **Land the hand-off in one React commit.** `settle()` clears the flights, resets `attach`, and resets the panel synchronously so React batches it. An `await` or a timer in the middle splits it into two commits and double-exposes a photo.
+- Land the hand-off in one React commit. `settle()` clears the flights, resets `attach`, and resets the panel synchronously so React batches it. An `await` or a timer in the middle splits it into two commits and double-exposes a photo.
 
-- **Clamp opacity interpolations, let transforms extend.** `withSpring` settles past 1 with `dampingRatio` below 1. An opacity past 1 is an error; a scale past 1 is the bounce.
+- Clamp opacity interpolations, let transforms extend. `withSpring` settles past 1 with `dampingRatio` below 1. An opacity past 1 is an error; a scale past 1 is the bounce.
 
-- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility, and `scheduleOnRN` from `react-native-worklets` for JS callbacks out of worklets.
+- Use `.get()` and `.set()` on shared values instead of `.value` for React Compiler compatibility, and `scheduleOnRN` from `react-native-worklets` for JS callbacks out of worklets.

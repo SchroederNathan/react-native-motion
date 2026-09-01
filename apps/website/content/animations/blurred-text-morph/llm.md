@@ -23,8 +23,8 @@ react-native-worklets
 
 ## Font loading
 
-Any typeface works. The one hard requirement is that Skia takes the font **file**,
-not a registered family name — a family loaded with `expo-font` is invisible to
+Any typeface works. The one hard requirement is that Skia takes the font file,
+not a registered family name. A family loaded with `expo-font` is invisible to
 `useFont`, and passing `fontFamily` renders nothing.
 
 ```tsx
@@ -36,7 +36,7 @@ const font = useFont(FONT, fontSize)
 
 `fontSource` is a required prop of `MorphingText` for exactly this reason: the
 component has no business owning the typeface. Any required asset module is a
-valid `DataSourceParam` — a local `.otf`/`.ttf`, or an `@expo-google-fonts/*`
+valid `DataSourceParam`: a local `.otf`/`.ttf`, or an `@expo-google-fonts/*`
 export (those are already `require`'d `.ttf` modules), if you would rather not
 bundle a file.
 
@@ -74,7 +74,7 @@ keyed.forEach((k, index) => {
 })
 ```
 
-Use advances, not tight bounds — bounds drop trailing spaces and side bearings.
+Use advances, not tight bounds. Tight bounds drop trailing spaces and side bearings.
 Advances are indexed per character, so `[...text]` and `getGlyphIDs(text)` must
 stay in step: keep strings ASCII. Spaces are fine; they carry a real advance and
 draw nothing.
@@ -161,10 +161,10 @@ useEffect(() => {
 
 Two things this gets right that a naive version does not:
 
-1. A phase flip **retargets** the same shared values, so an interrupted glyph
+1. A phase flip retargets the same shared values, so an interrupted glyph
    always ends consistent with its current phase.
 2. The `appliedPhase` guard means an index-only change (letters moved, glyph
-   survived) does **not** restart the enter animation toward a value already
+   survived) does not restart the enter animation toward a value already
    held.
 
 ## Removal
@@ -205,7 +205,7 @@ const blur = useDerivedValue(() => blurMax * (1 - fade.get()))
 transform origin is the top-left, so pass `origin={{ x: glyphWidth / 2, y:
 -fontSize * 0.34 }}` to scale around the glyph's own centre.
 
-Shared values go straight into Skia props — no `createAnimatedComponent`, no
+Shared values go straight into Skia props: no `createAnimatedComponent`, no
 `useAnimatedProps`:
 
 ```tsx
@@ -241,7 +241,7 @@ clips a wide string or leaves a narrow one too small.
 
 ## Memoization
 
-Pass **primitives** to the glyph component, not a `cell` object. A new object per
+Pass primitives to the glyph component, not a `cell` object. A new object per
 change defeats `memo` for every glyph in the string. With primitives, a glyph
 whose `x`, `charIndex` and phase are unchanged does no React work when a
 different glyph changes.

@@ -54,15 +54,15 @@ Then:
 1. Install all required dependencies listed in the guide
 2. Copy each file into your project at the paths specified
 3. Follow the usage example to integrate the animation into your app
-4. Review the "Common Pitfalls" section and verify your implementation avoids each one`
+4. Review the "Do not change these behaviors" section and verify your implementation keeps each one`
 
   const explainPrompt = `I want to understand how this React Native animation works. Read the full implementation and guide from: ${mdUrl}
 
 Then explain:
-1. The overall animation architecture — what techniques and libraries are used and why
+1. The overall animation architecture, which techniques and libraries are used and why
 2. How the gesture handling and animation values flow through the components
 3. Key implementation details that make the animation feel polished
-4. The common pitfalls listed and why each one matters
+4. The behaviors the guide says not to change, and why each one matters
 
 Focus on building my mental model of the animation system, not just describing the code line by line.`
 
