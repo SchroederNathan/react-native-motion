@@ -1,21 +1,18 @@
 export const meta = {
   title: 'Blurred Text Morph',
   slug: 'blurred-text-morph',
-  description: 'Character-diffing text swap drawn through Skia. Shared letters glide to their new position while the rest blur out and blur in, one after another.',
+  description: 'A text swap that diffs the two phrases character by character, drawn through Skia. Shared letters glide to their new position while the rest blur out and in.',
   video: '/videos/blurred-text-morph.mp4',
   tags: ['text', 'morph', 'skia', 'blur', 'stagger', 'spring', 'typography'],
 }
 
 ## Overview
 
-A character-diffing text swap. When the string changes, letters the two phrases share keep their identity and glide to their new position; the rest blur out and blur in, staggered left to right.
+When the string changes, the two phrases are diffed character by character. Letters they share keep their identity and glide to their new position; the rest blur out and blur in, staggered left to right.
 
 Every glyph is drawn as its own Skia `Group` so it can carry a real Gaussian blur. `Animated.Text` cannot do that, and it is the whole reason to reach for Skia here rather than animating native text views.
 
-- Each character is keyed `` `${char}#${nthOccurrence}` ``, so the second `e` in a phrase reconciles to the same glyph across a swap.
-- Positions come from `font.getGlyphWidths(font.getGlyphIDs(text))`, not measured text bounds.
-- Each glyph is a retargetable state machine, so tapping faster than the animation completes never strands a letter.
-- The type size is fitted once to the widest phrase, so nothing resizes as the text changes.
+Each character is keyed by occurrence, `` `${char}#${nthOccurrence}` ``, so the second `e` in a phrase reconciles to the same glyph across a swap. Positions come from real glyph advances via `font.getGlyphWidths(font.getGlyphIDs(text))` rather than measured text bounds. Every glyph is a retargetable state machine, so tapping faster than the animation completes never strands a letter, and the type size is fitted once to the widest phrase so nothing resizes as the text changes.
 
 <Installer packages={['@shopify/react-native-skia', 'react-native-reanimated', 'react-native-worklets']} />
 
@@ -399,9 +396,9 @@ export function MorphingText({
 
 ## Common pitfalls
 
-- Never run the enter animation on mount only. `useEffect(..., [])` is the single biggest trap here. A glyph caught mid-exit that reappears in the next phrase is *reused* by React (same key), so it never remounts. It just sits at `opacity: 0` while still holding its layout slot. The text renders with gaps, and it looks like dropped frames rather than a bug. Drive the animation off a phase flip instead.
+- Never run the enter animation on mount only. `useEffect(..., [])` is the single biggest trap here. A glyph caught mid-exit that reappears in the next phrase is reused by React (same key), so it never remounts. It just sits at `opacity: 0` while still holding its layout slot. The text renders with gaps, and it looks like dropped frames rather than a bug. Drive the animation off a phase flip instead.
 
-- Do not remove exited glyphs with `setTimeout`. A pending timer keyed to a glyph will happily fire after that letter has come back and delete something visible. Use the exit animation's own completion callback, and guard the removal: only drop the cell if it is *still* in the exit phase.
+- Do not remove exited glyphs with `setTimeout`. A pending timer keyed to a glyph will happily fire after that letter has come back and delete something visible. Use the exit animation's own completion callback, and guard the removal: only drop the cell if it is still in the exit phase.
 
 - Carry in-flight exiting glyphs forward, by reference. When the text changes again mid-exit, rebuild the list so previously-exiting cells survive, and reuse the same object so `memo` bails out and their animation is not restarted. Rebuilding them fresh restarts the exit from the top every keystroke.
 

@@ -1,21 +1,18 @@
 export const meta = {
-  title: 'Attachment Menu',
+  title: 'ChatGPT Attachment Menu',
   slug: 'chatgpt-attachments',
-  description: 'The ChatGPT media picker, rebuilt off a frame-by-frame reading of the real thing. One glass panel grows out of the + button, morphs into a full-bleed photo grid, and then shrinks into the composer carrying the photo you picked. It is the same surface the whole way through.',
+  description: 'The ChatGPT media picker, rebuilt frame by frame from the real thing. One glass panel grows out of the + button, morphs into a photo grid, and shrinks back into the composer with the photo you picked.',
   video: '/videos/chatgpt-attachment.mp4',
   tags: ['menu', 'morph', 'glass', 'shared-element', 'photos', 'keyboard', 'ease-out'],
 }
 
 ## Overview
 
-A single glass panel that is the whole interaction. Tap + and a circle grows out of the button into a five-row menu. Pick Photos and the same surface morphs into a full-bleed photo grid. Confirm, and copies of the selected photos fly out of their grid cells into the composer while the panel collapses back into the +. Nothing hands off between views, so the material and the corners stay continuous through every shape.
+One glass panel carries the whole interaction. Tap + and a circle grows out of the button into a five-row menu. Pick Photos and the same surface morphs into a full-bleed photo grid. Confirm, and copies of the selected photos fly out of their grid cells into the composer while the panel collapses back into the +. Nothing hands off between views, so the material and the corners stay continuous through every shape.
 
-- The surface has three shapes: the circle around the + (34pt), a 280pt menu, and the full-bleed grid. A derived rect mixes between them off two shared values, `open` and `morph`.
-- Content scales instead of re-laying out. The menu and the grid are laid out at their natural size, anchored top-left, and scaled by the panel's width ratio through the morph.
-- Each picked photo flies as a shared element. It leaves the exact cell rect FlashList reports and lands on a composer slot that is still rising as the strip opens.
-- The glass is real where it can be: `expo-glass-effect` on iOS 26, an `expo-blur` stand-in below it, and a flat measured color on Android, where a blur hosted over the keyboard has nothing to sample.
-- The keyboard stays up. The sheet lives in an `OverKeyboardView`, and every rect derives from the keyboard-tracked composer bottom.
-- The camera rides the same panel. The sheet morphs into a camera preview with the grid's exact footprint, and a capture leaves as the whole sheet, shrinking into its composer slot.
+The panel takes three shapes: the 34pt circle around the +, a 280pt menu, and the full-bleed grid. A derived rect mixes between them off two shared values, `open` and `morph`. The menu and the grid are laid out once at their natural size, anchored top-left, and scaled by the panel's width ratio, so nothing re-lays out mid-morph. Each picked photo flies as a shared element, leaving the exact cell rect FlashList reports and landing on a composer slot that is still rising as the strip opens.
+
+The glass is real where the platform allows it: `expo-glass-effect` on iOS 26, an `expo-blur` stand-in below that, and a flat measured color on Android, where a blur hosted over the keyboard has nothing to sample. The keyboard stays up the whole time because the sheet lives in an `OverKeyboardView` and every rect derives from the keyboard-tracked composer bottom. The camera rides the same panel too. The sheet morphs into a preview with the grid's exact footprint, and a capture leaves as the whole sheet, shrinking into its composer slot.
 
 <Installer packages={['react-native-reanimated', 'react-native-worklets', 'react-native-keyboard-controller', 'react-native-safe-area-context', 'expo-glass-effect', 'expo-blur', 'expo-image', 'expo-haptics', 'expo-media-library', 'expo-camera', '@shopify/flash-list']} />
 

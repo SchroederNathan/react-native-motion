@@ -1,20 +1,16 @@
 export const meta = {
   title: 'Linear Tab Bar',
   slug: 'linear-tab-bar',
-  description: 'A glassmorphic tab bar with pill-to-menu morph, liquid glass stretch, touch-tracking glow, and search mode transitions.',
+  description: 'A frosted-glass tab bar modeled on Linear\'s mobile app. Drag up and the pill morphs into a menu, drag past its edges and the glass stretches, and search grows out of it in place.',
   video: '/videos/linear-tab-bar.mp4',
   tags: ['tab-bar', 'glass', 'morph', 'gesture', 'haptics', 'spring', 'menu', 'search'],
 }
 
 ## Overview
 
-A glassmorphic tab bar modeled on Linear's mobile app: a frosted-glass pill with tappable, swipeable tab icons. Drag up to open a full menu with staggered rows. The search control grows into a search bar while the pill collapses. Liquid glass stretch bends the pill when you drag past its edges; a radial glow tracks your finger.
+A frosted-glass pill with tappable, swipeable tab icons, modeled on Linear's mobile app. Drag up to open a full menu with staggered rows, or tap the search control to grow it into a search bar while the pill collapses. Dragging past the pill's edges stretches the glass like liquid, and a radial glow tracks your finger.
 
-- The pill-to-menu morph squeezes first (scaleX dips around 15% progress), then the height grows into the staggered menu.
-- Overdrag stretches the glass along the drag axis with a damped curve and squeezes it slightly across it.
-- A radial SVG gradient sits under the finger and fades out on release.
-- In search mode the pill's width goes to zero as the search bar grows, and a close button slides in.
-- The header, divider, and seven menu rows stagger in at 40ms intervals, reversed on close.
+The morph squeezes before it grows: scaleX dips around 15% progress, then the height expands into the menu. Overdrag stretches the glass along the drag axis with a damped curve and squeezes it slightly across it. The glow is a radial SVG gradient that sits under the finger and fades out on release. In search mode the pill's width goes to zero as the search bar grows and a close button slides in. The header, divider, and seven menu rows stagger in at 40ms intervals and reverse on close.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-keyboard-controller', 'expo-blur', 'expo-haptics', 'expo-linear-gradient', 'react-native-svg', '@react-native-masked-view/masked-view', 'lucide-react-native', 'react-native-safe-area-context', 'react-native-worklets']} />
 

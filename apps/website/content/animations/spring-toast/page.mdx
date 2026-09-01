@@ -1,14 +1,14 @@
 export const meta = {
   title: 'Stack Toast',
   slug: 'spring-toast',
-  description: 'Stacking bottom toasts: each new one springs up and pushes the rest back a step, smaller behind smaller. The front toast follows the finger, rubber-banding upward and committing on a downward flick. Dismissing it springs the stack forward.',
+  description: 'Bottom toasts that stack. Each new one springs up and pushes the rest back a step, and a drag or flick dismisses the front one.',
   video: '/videos/spring-toast.mp4',
   tags: ['toast', 'stack', 'spring', 'gesture', 'swipe-to-dismiss', 'haptics', 'notification'],
 }
 
 ## Overview
 
-A stacking bottom toast. Each new toast springs up from below the screen edge; the ones already there step up 14px and shrink 5% per slot. The front toast follows a downward drag and rubber-bands against an upward one. A drag past 56px, or a flick past 800 px/s, commits the dismiss with a light haptic, and the toasts behind spring forward. Every toast auto-dismisses after 3 seconds and carries an optional action button plus a close button.
+Toasts stack at the bottom of the screen. Each new one springs up from below the edge; the ones already there step up 14px and shrink 5% per slot. The front toast follows a downward drag and rubber-bands against an upward one. A drag past 56px, or a flick past 800 px/s, commits the dismiss with a light haptic, and the toasts behind spring forward. Every toast auto-dismisses after 3 seconds and carries an optional action button plus a close button.
 
 <Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-haptics', 'react-native-safe-area-context', '@expo/vector-icons']} />
 

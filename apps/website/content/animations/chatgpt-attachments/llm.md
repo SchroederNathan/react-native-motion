@@ -1,4 +1,4 @@
-# Attachment Menu - Implementation Brief
+# ChatGPT Attachment Menu - Implementation Brief
 
 One glass panel opens out of the composer's + button, becomes a five-row menu, morphs into a full-bleed photo grid (or a camera), and collapses back into the + while copies of the picked photos fly into the composer. It is the same surface the whole way through; nothing hands off between views.
 

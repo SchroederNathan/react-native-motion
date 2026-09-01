@@ -1,7 +1,7 @@
 export const meta = {
   title: 'Aurora Curtain',
   slug: 'aurora-curtain',
-  description: 'A Skia curtain of violet light over the top of the screen, every constant measured off a real one: irregular rays that lean into their own drift, a calibrated grain, and more of it hidden above the edge than on show. Drag down to draw the rest in.',
+  description: 'A curtain of violet light drawn by a single Skia shader, looping without a seam. Drag down to pull more of it onto the screen.',
   video: '/videos/aurora-curtain.mp4',
   tags: ['aurora', 'skia', 'shader', 'gesture', 'procedural', 'seamless-loop'],
 }
@@ -10,12 +10,9 @@ export const meta = {
 
 A single fragment shader paints the whole thing: a curtain of violet light draped over the top of the screen, nine overlapping rays swinging as if in a slow breeze. React's only job is to feed it three uniforms, so nothing on the JS side ever animates a view.
 
-- The lean is a time lag, not a drawn slant. Every ray reads its swing at a clock lagged by depth (`tw - ys * LAG`), so rays lean against their own drift while moving and straighten as they settle.
-- Nothing is periodic. Ray centres are scattered off the even lattice and widths vary widely, because evenly spaced rays read as vertical stripes.
-- The loop wraps invisibly. Every rate in the shader is a whole-number multiple of a 14-second master clock, driven by one linear, non-reversing `withRepeat`.
-- More curtain hides above the screen than shows. Dragging down is a ScrollView overscroll, so the hidden part follows the finger 1:1 and the rubber-band settle is the platform's own scroll physics.
+The lean is a time lag, not a drawn slant. Each ray reads its swing at a clock lagged by depth (`tw - ys * LAG`), so it leans against its own drift while moving and straightens as it settles. Ray centres are scattered off the even lattice and widths vary widely, because evenly spaced rays read as vertical stripes. Every rate in the shader is a whole-number multiple of a 14-second master clock driven by one linear, non-reversing `withRepeat`, which is what lets the loop wrap with no visible seam.
 
-Every constant carries a note saying what was measured to pick it: the vertical falloff curve, the violet channel ordering, the gap darkness, the grain amplitude.
+More of the curtain hides above the screen than shows. Dragging down is a plain ScrollView overscroll, so the hidden part follows the finger 1:1 and the rubber-band settle is the platform's own scroll physics. Every constant in the file carries a note saying what was measured to pick it, from the vertical falloff curve to the grain amplitude.
 
 <Installer packages={['@shopify/react-native-skia', 'react-native-reanimated', 'expo-status-bar']} />
 
