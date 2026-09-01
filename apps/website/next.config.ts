@@ -6,6 +6,11 @@ const rehypeCodeMeta = resolve(import.meta.dirname, "lib/rehype-code-meta.mjs");
 
 const nextConfig: NextConfig = {
   pageExtensions: ["js", "jsx", "mdx", "ts", "tsx"],
+  turbopack: {
+    // The stray lockfile in the home directory makes Next.js infer the wrong
+    // workspace root, which breaks module resolution in dev.
+    root: resolve(import.meta.dirname, "../.."),
+  },
 };
 
 const withMDX = createMDX({

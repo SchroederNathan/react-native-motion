@@ -1,0 +1,1092 @@
+export const meta = {
+  title: 'Attachment Menu',
+  slug: 'chatgpt-attachments',
+  description: 'The ChatGPT media picker, rebuilt off a frame-by-frame reading of the real thing. One glass panel grows out of the + button, morphs into a full-bleed photo grid, and then shrinks into the composer carrying the photo you picked — the same surface the whole way through.',
+  video: '/videos/chatgpt-attachment.mp4',
+  tags: ['menu', 'morph', 'glass', 'shared-element', 'photos', 'keyboard', 'ease-out'],
+}
+
+## Overview
+
+A **single glass panel that is the whole interaction**. Tap + and a circle grows out of the button into a five-row menu. Pick Photos and the same surface morphs into a full-bleed photo grid. Confirm, and copies of the selected photos fly out of their grid cells into the composer while the panel collapses back into the +. Nothing hands off between views, so the material and the corners stay continuous through every shape.
+
+- **One surface, three shapes**: the circle around the + (34pt), a 280pt menu, and the full-bleed grid. A derived rect mixes between them off two shared values, `open` and `morph`.
+- **Scaled content, not re-layout**: the menu and the grid are laid out at their natural size, anchored top-left, and scaled by the panel's width ratio through the morph.
+- **Shared-element flights**: each picked photo leaves the exact cell rect FlashList reports, and lands on a composer slot that is still rising as the strip opens.
+- **Real liquid glass**: `expo-glass-effect` on iOS 26, an `expo-blur` stand-in below it, and a flat measured color on Android, where a blur hosted over the keyboard has nothing to sample.
+- **Keyboard stays up**: the sheet lives in an `OverKeyboardView`, and every rect derives from the keyboard-tracked composer bottom.
+- **Camera rides the same panel**: the sheet morphs into a camera preview with the grid's exact footprint, and a capture leaves as the whole sheet, shrinking into its composer slot.
+
+<Installer packages={['react-native-reanimated', 'react-native-worklets', 'react-native-keyboard-controller', 'react-native-safe-area-context', 'expo-glass-effect', 'expo-blur', 'expo-image', 'expo-haptics', 'expo-media-library', 'expo-camera', '@shopify/flash-list']} />
+
+<CodePreviewer>
+
+```ts title="constants.ts"
+import type { ViewStyle } from 'react-native';
+import { Easing } from 'react-native-reanimated';
+
+// Every number below was measured frame by frame off a screen recording of the
+// real picker (1290×2796 @3x, so a 430×932pt window) and divided down to
+// points. When a value looks oddly specific, that's why.
+
+/** Side gutter shared by the composer, the menu and the photo grid. */
+export const GUTTER = 12;
+
+export const COLORS = {
+  background: '#000000',
+  /** Composer + keyboard surface. */
+  surface: '#1D1D1D',
+  placeholder: '#777777',
+  text: '#FFFFFF',
+  /** The glass controls darken what they sit on. */
+  controlScrim: 'rgba(0,0,0,0.31)',
+  /**
+   * Laid over the panel's blur to land on the measured material. Over black
+   * the menu measures rgb(30,30,30); the blur alone lands at 19, so this
+   * closes the remaining 11.
+   */
+  material: 'rgba(255,255,255,0.047)',
+  /**
+   * The same material as an opaque fill, for a surface with no blur to sample.
+   * Android's blur can only sample its own window, and the sheet is hosted
+   * over the keyboard in another one, so a blur there returns nothing.
+   */
+  materialFlat: '#1E1E1E',
+  /** Fill behind a photo for the frames before it decodes. */
+  photoFill: '#141414',
+} as const;
+
+export const COMPOSER = {
+  radius: 24,
+  /** Row holding +, the field, the mic and the action button. */
+  rowHeight: 48,
+  rowPaddingLeft: 14,
+  /** Hit target the + glyph sits in the middle of. */
+  plusHit: 30,
+  /**
+   * Diameter of the circular well the menu grows out of. Nothing paints this
+   * circle while the sheet is shut; it is the panel's own shape at the very
+   * start of the open.
+   */
+  plusWell: 34,
+  /** Gap between the composer's bottom edge and the top of the keyboard. */
+  keyboardGap: 12,
+  stripPaddingTop: 8,
+  stripGap: 7,
+  thumbSize: 115,
+  thumbRadius: 18,
+  thumbGap: 7,
+  /** How far right the + glyph slides to clear the space the menu opens on. */
+  plusSlide: 16,
+} as const;
+
+/** Window X of the + button's centre, where the panel's circle is anchored. */
+export const PLUS_CENTER_X = GUTTER + COMPOSER.rowPaddingLeft + COMPOSER.plusHit / 2;
+
+/** Height the attachment strip adds to the composer: 8 + 115 + 7. */
+export const COMPOSER_STRIP_HEIGHT =
+  COMPOSER.stripPaddingTop + COMPOSER.thumbSize + COMPOSER.stripGap;
+
+export const MENU = {
+  width: 280,
+  itemHeight: 66,
+  paddingVertical: 12,
+  /** Fitted from the reference's corner profile, a near-squircle. */
+  radius: 46,
+  /** The menu's centre sits this far below the + button's centre. */
+  centerOffset: 7,
+} as const;
+
+export const MENU_ITEMS = 5;
+export const MENU_HEIGHT = MENU.itemHeight * MENU_ITEMS + MENU.paddingVertical * 2;
+
+export const GRID = {
+  columns: 3,
+  /** Hairline of the sheet showing between the cells. */
+  gap: 1.5,
+  /** Each cell's own corner radius: a softened edge, not a rounded tile. */
+  cellRadius: 2,
+  /** Corner radius of the sheet once it has become the grid. */
+  panelRadius: 52,
+} as const;
+
+/** Fades take a curve. Everything that moves takes a spring. */
+export const EASE_FADE = Easing.out(Easing.quad);
+/** Kept for the blur pulse, which wants a quart's hard front edge. */
+export const EASE_OUT = Easing.out(Easing.poly(4));
+
+export const SPRING = {
+  /**
+   * The panel: opening out of the + button, morphing into the grid,
+   * collapsing back. Reanimated's default spring is { duration: 550,
+   * dampingRatio: 1 }; this is that spring, faster and with a touch of
+   * bounce. duration is the number to tune. Lower is faster.
+   */
+  panel: { duration: 400, dampingRatio: 0.8 },
+  /**
+   * The same spring with the bounce taken out, for the way back to the +.
+   * `open` overshooting below zero would take the panel's rect past the
+   * button it is collapsing into.
+   */
+  panelOut: { duration: 400, dampingRatio: 1 },
+  /** Grid → the thumbnail's slot in the composer. */
+  attach: { duration: 400 },
+  /** The composer growing around the attachment strip. */
+  strip: { duration: 400 },
+} as const;
+
+export const DURATION = {
+  /** The panel's material transition, in ms. Tracks SPRING.panel.duration. */
+  panel: SPRING.panel.duration,
+  /** Content crossfade inside the morphing panel. */
+  crossfade: 150,
+  /** Blur ramp layered over the crossfade. */
+  blur: 160,
+  /**
+   * How long the + glyph gets to itself before the panel arrives. The panel
+   * opens as the circle around that glyph and is 14pt wider than it, so it
+   * has to be absent for this stretch, not small.
+   */
+  plusLead: 30,
+} as const;
+
+/**
+ * The layout contract between the panel and everything it shows. The menu,
+ * the grid and the camera are laid out at their own natural size, anchored to
+ * the panel's top-left corner, and scaled from there through the morph.
+ */
+export const PANEL_CONTENT = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  transformOrigin: 'top left',
+} as const satisfies ViewStyle;
+
+/**
+ * Window Y of the sheet's top edge, given the composer's bottom. The panel,
+ * the grid's layout and the flights all have to agree on this line, so it is
+ * computed in exactly one place.
+ */
+export function sheetTopFromComposerBottom(bottom: number) {
+  'worklet';
+  return bottom - COMPOSER.rowHeight / 2 + MENU.centerOffset - MENU_HEIGHT / 2;
+}
+
+/** A rect, in window coordinates. */
+export interface Frame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Linear interpolation, on the UI thread. Lives here because the panel and
+ * the photos flying out of it have to agree on how a rect is walked from one
+ * frame to another.
+ */
+export function mix(t: number, a: number, b: number) {
+  'worklet';
+  return a + (b - a) * t;
+}
+```
+
+```tsx title="Glass.tsx"
+import { BlurView } from 'expo-blur';
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
+import { Platform, StyleSheet, View, type ViewProps, type ViewStyle } from 'react-native';
+import Animated, { type AnimatedProps } from 'react-native-reanimated';
+import { COLORS } from './constants';
+
+/** True on iOS 26+, where `expo-glass-effect` renders the real material. */
+const LIQUID_GLASS = isLiquidGlassAvailable();
+
+/**
+ * Whether a `BlurView` here actually samples what is behind it. On iOS it
+ * always does. On Android it never does in this screen: the blur copies its
+ * own window's contents, and the sheet is hosted over the keyboard in a
+ * window of its own, so what it finds behind itself is nothing. Surfaces
+ * below fall back to the flat colour they were measured at.
+ */
+const BLURS_ITS_BACKDROP = Platform.OS !== 'android';
+
+const AnimatedGlassView = Animated.createAnimatedComponent(GlassView);
+
+export type GlassStyleName = 'regular' | 'none';
+
+/**
+ * A `GlassView` cannot be brought in or out by animating opacity. Put one
+ * under an animated `opacity` and it renders nothing at all, even at 1. It
+ * has its own native transition for exactly this, so every glass surface here
+ * is mounted at a fixed opacity and switched between styles instead.
+ *
+ * `target` is where it should end up; the first render always starts at
+ * `none` so the transition has somewhere to come from.
+ */
+function useGlassStyle(target: GlassStyleName, duration: number) {
+  const [style, setStyle] = useState<GlassStyleName>('none');
+  useEffect(() => setStyle(target), [target]);
+  return { style, animate: true, animationDuration: duration };
+}
+
+/**
+ * Shape without a clip. `overflow: 'hidden'` is deliberately absent: the
+ * native view rounds itself off its own `borderRadius`, and clipping it is
+ * what stops an interactive glass surface from rendering the bulge it makes
+ * under a finger. Anything laid over the material carries its own radius.
+ */
+function shapeOf(radius: number): ViewStyle {
+  return { borderRadius: radius, borderCurve: 'continuous' };
+}
+
+export interface GlassProps extends ViewProps {
+  /** Fill for the `expo-blur` stand-in only. */
+  fallbackTint?: string;
+  /** Corner radius; the native view rounds the material to it. */
+  radius?: number;
+  /** Whether the glass is showing. Transitions natively, never by opacity. */
+  active?: boolean;
+  /**
+   * Whether the material reacts to a press. True for a control; false for a
+   * container, which should not bulge under a finger aiming at something
+   * inside it.
+   */
+  interactive?: boolean;
+  /** Transition length in seconds. */
+  duration?: number;
+  children?: ReactNode;
+}
+
+/** A glass surface: a round control, a pill, or the composer bar itself. */
+export function Glass({
+  fallbackTint,
+  radius = 0,
+  active = true,
+  interactive = true,
+  duration = 0.25,
+  style,
+  children,
+  ...rest
+}: GlassProps) {
+  const glassEffectStyle = useGlassStyle(active ? 'regular' : 'none', duration);
+
+  if (!LIQUID_GLASS) {
+    return (
+      <BlurView
+        intensity={60}
+        tint="systemChromeMaterialDark"
+        // The fallback is a blur, and a blur does have to clip to its shape.
+        style={[shapeOf(radius), styles.clip, style]}
+        {...rest}
+      >
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: fallbackTint ?? COLORS.controlScrim },
+          ]}
+        />
+        {children}
+      </BlurView>
+    );
+  }
+
+  return (
+    <GlassView
+      glassEffectStyle={glassEffectStyle}
+      colorScheme="dark"
+      isInteractive={interactive}
+      style={[shapeOf(radius), style]}
+      {...rest}
+    >
+      {children}
+    </GlassView>
+  );
+}
+
+/**
+ * The frosted material the panel is made of. Real liquid glass where the OS
+ * has it, `expo-blur` below iOS 26, a flat measured fill on Android.
+ *
+ * `style` carries the panel's live corner radius: the material rounds itself
+ * rather than being clipped by the panel, so it can still bulge under a
+ * press. It stays in the touch path, which also means a tap on the menu's own
+ * padding no longer falls through to the dismiss backdrop behind it.
+ */
+export function PanelMaterial({
+  variant,
+  duration,
+  style,
+}: {
+  variant: 'regular' | 'none';
+  duration: number;
+  /** Animated: the panel drives the material's corner radius through this. */
+  style?: AnimatedProps<ViewProps>['style'];
+}) {
+  const glassEffectStyle = useGlassStyle(variant, duration);
+
+  if (!LIQUID_GLASS) {
+    if (variant === 'none') return null;
+    return (
+      <Animated.View pointerEvents="none" style={[styles.clip, style]}>
+        {BLURS_ITS_BACKDROP ? (
+          <BlurView
+            intensity={70}
+            tint="systemUltraThinMaterialDark"
+            style={StyleSheet.absoluteFill}
+          >
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.fallbackTint]} />
+          </BlurView>
+        ) : (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flatMaterial]} />
+        )}
+      </Animated.View>
+    );
+  }
+
+  return (
+    <AnimatedGlassView
+      glassEffectStyle={glassEffectStyle}
+      colorScheme="dark"
+      isInteractive
+      style={[styles.shape, style]}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  shape: {
+    borderCurve: 'continuous',
+  },
+  clip: {
+    overflow: 'hidden',
+  },
+  fallbackTint: {
+    backgroundColor: COLORS.material,
+  },
+  flatMaterial: {
+    backgroundColor: COLORS.materialFlat,
+  },
+});
+```
+
+```tsx title="AttachmentPanel.tsx"
+import { BlurView } from 'expo-blur';
+import type { ReactNode } from 'react';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useDerivedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
+import {
+  COMPOSER,
+  GRID,
+  GUTTER,
+  MENU,
+  MENU_HEIGHT,
+  mix,
+  PANEL_CONTENT,
+  PLUS_CENTER_X,
+  sheetTopFromComposerBottom,
+} from './constants';
+import { PanelMaterial } from './Glass';
+
+export interface PanelDrivers {
+  /** 0 the circle around the + button → 1 the menu at rest. */
+  open: SharedValue<number>;
+  /** 0 menu-shaped → 1 full-bleed grid. */
+  morph: SharedValue<number>;
+  /** Opacity of the menu rows. */
+  menuOpacity: SharedValue<number>;
+  /** Opacity of the photo grid. */
+  gridOpacity: SharedValue<number>;
+  /** Opacity of the blur laid over the whole panel mid-transition. */
+  blur: SharedValue<number>;
+  /** Window Y of the composer's bottom edge, tracked live off the keyboard. */
+  composerBottom: SharedValue<number>;
+}
+
+interface AttachmentPanelProps extends PanelDrivers {
+  screenHeight: number;
+  /**
+   * Width the grid is laid out at — the panel's own width once morphed. The
+   * sheet keeps the composer's gutter rather than going full bleed, so this
+   * is narrower than the screen and the grid runs edge to edge inside it.
+   */
+  gridWidth: number;
+  /** Height the grid is laid out at — the panel's own height once morphed. */
+  gridHeight: number;
+  /**
+   * Which layer takes touches. Both layers stay mounted through the morph,
+   * and a faded-out view still swallows taps. Without this the menu
+   * intercepts every tap meant for the grid underneath it.
+   */
+  interactive: 'menu' | 'grid' | 'none';
+  /** Whether the panel is wearing its frosted material. */
+  glass: boolean;
+  /** How long the glass takes to come or go, in seconds. */
+  glassDuration: number;
+  menu: ReactNode;
+  grid: ReactNode;
+}
+
+/**
+ * The one surface behind the whole interaction. It is the menu and then the
+ * photo grid — never two views handing off to each other, which is why the
+ * corners and the material stay continuous. Its contents are laid out at
+ * their own natural size and scaled to fit the panel, so the grid shrinks
+ * into the menu's footprint and the menu blows up out of it.
+ */
+export function AttachmentPanel({
+  screenHeight,
+  gridWidth,
+  gridHeight,
+  interactive,
+  glass,
+  glassDuration,
+  menu,
+  grid,
+  open,
+  morph,
+  menuOpacity,
+  gridOpacity,
+  blur,
+  composerBottom,
+}: AttachmentPanelProps) {
+  /**
+   * The panel's frame, in window coordinates. Menu and grid share a top
+   * edge — that isn't a simplification, it's what the frames measure — so the
+   * morph only has to move the left, right and bottom edges.
+   */
+  const rect = useDerivedValue(() => {
+    const bottom = composerBottom.get();
+    const plusCenter = bottom - COMPOSER.rowHeight / 2;
+    const top = sheetTopFromComposerBottom(bottom);
+
+    // Left edge never moves: menu and sheet share the composer's gutter. So
+    // does the bottom edge once the sheet is open. It stops a gutter short of
+    // the screen rather than running off it, so the inset reads the same on
+    // three sides and the sheet's bottom corners are visible.
+    const m = morph.get();
+    let x = GUTTER;
+    let y = top;
+    let w = mix(m, MENU.width, gridWidth);
+    let h = mix(m, MENU_HEIGHT, screenHeight - top - GUTTER);
+    let r = mix(m, MENU.radius, GRID.panelRadius);
+
+    // The panel begins as the circle wrapping the + button and grows out of
+    // it, then collapses back into it on the way out. Nothing else ever draws
+    // that circle, so there is none to see while the sheet is shut.
+    const o = open.get();
+    const well = COMPOSER.plusWell;
+    x = mix(o, PLUS_CENTER_X - well / 2, x);
+    y = mix(o, plusCenter - well / 2, y);
+    w = mix(o, well, w);
+    h = mix(o, well, h);
+    r = mix(o, well / 2, r);
+
+    return { x, y, w, h, r };
+  });
+
+  /**
+   * The panel's own opacity is never animated: it carries the glass, and
+   * glass put under an animated opacity renders nothing. Every layer inside
+   * carries this fade instead, and the material has its own native
+   * transition. The ramp starts a beat late so the circle reads as a circle
+   * before the rows arrive.
+   */
+  const openFade = useDerivedValue(() =>
+    interpolate(open.get(), [0.12, 0.6], [0, 1], Extrapolation.CLAMP),
+  );
+
+  const panelStyle = useAnimatedStyle(() => {
+    const { x, y, w, h } = rect.get();
+    return { left: x, top: y, width: w, height: h };
+  });
+
+  /** The panel's live corner radius, worn by the material and by the clip. */
+  const shapeStyle = useAnimatedStyle(() => ({ borderRadius: rect.get().r }));
+
+  // Both wrappers carry their content's real size. A zero-sized wrapper would
+  // still paint, but iOS drops touches that land outside a view's bounds.
+  const menuStyle = useAnimatedStyle(() => ({
+    opacity: menuOpacity.get() * openFade.get(),
+    transform: [{ scale: rect.get().w / MENU.width }],
+  }));
+
+  const gridStyle = useAnimatedStyle(() => ({
+    opacity: gridOpacity.get() * openFade.get(),
+    transform: [{ scale: rect.get().w / gridWidth }],
+  }));
+
+  // Capped below 1: the tint that comes with a dark blur would otherwise read
+  // as the panel dimming rather than softening.
+  const blurStyle = useAnimatedStyle(() => ({ opacity: blur.get() * 0.85 * openFade.get() }));
+
+  return (
+    <Animated.View pointerEvents="box-none" style={[styles.panel, panelStyle]}>
+      {/* The panel's material, on its own and never wrapped in an animated
+          opacity. It rounds itself off `shapeStyle` rather than being clipped
+          by the panel — an interactive glass surface draws the bulge it makes
+          under a press outside its own bounds, and a clip eats it. It is the
+          menu's surface and then the grid's: it stays on through the morph,
+          so the photos sit on the same material the rows did. */}
+      <PanelMaterial
+        variant={glass ? 'regular' : 'none'}
+        duration={glassDuration}
+        style={[StyleSheet.absoluteFill, shapeStyle]}
+      />
+
+      {/* Everything that has to be cut to the panel's shape, and nothing
+          else. The clip lives here rather than on the panel so no glass sits
+          under an `overflow: hidden`. */}
+      <Animated.View
+        pointerEvents="box-none"
+        style={[StyleSheet.absoluteFill, styles.clip, shapeStyle]}
+      >
+        <Animated.View
+          pointerEvents={interactive === 'grid' ? 'auto' : 'none'}
+          style={[styles.content, { width: gridWidth, height: gridHeight }, gridStyle]}
+        >
+          {grid}
+        </Animated.View>
+
+        <Animated.View
+          pointerEvents={interactive === 'menu' ? 'auto' : 'none'}
+          style={[styles.content, { width: MENU.width, height: MENU_HEIGHT }, menuStyle]}
+        >
+          {menu}
+        </Animated.View>
+
+        {/* Everything inside the panel softens while it is moving and
+            sharpens as it settles. */}
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, blurStyle]}>
+          <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+const styles = StyleSheet.create({
+  panel: {
+    position: 'absolute',
+  },
+  clip: {
+    overflow: 'hidden',
+    borderCurve: 'continuous',
+  },
+  content: {
+    ...PANEL_CONTENT,
+  },
+});
+```
+
+```tsx title="useAttachmentPanel.ts"
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { KeyboardController } from 'react-native-keyboard-controller';
+import {
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+import { DURATION, EASE_FADE, EASE_OUT, SPRING } from './constants';
+
+export type MenuAction = 'camera' | 'photos' | 'files' | 'plugins' | 'think';
+
+export type Mode = 'closed' | 'menu' | 'photos' | 'camera';
+
+/**
+ * What the panel turns into once it stops being the menu. Kept apart from
+ * `mode`, because it has to outlive it: on the way back to the menu the sheet
+ * is still crossfading out, and swapping its contents mid-fade would flash
+ * the other sheet through it.
+ */
+export type Sheet = 'photos' | 'camera';
+
+interface PanelOptions {
+  /**
+   * Called whenever the panel walks away from a sheet — a dismiss, or the ‹
+   * back to the menu — so the screen can drop the sheet's selection with it.
+   */
+  onLeaveSheet?: () => void;
+}
+
+/**
+ * The panel's state machine: closed ⇄ menu ⇄ one of the sheets. It owns every
+ * shared value the panel morphs on and every way in and out of it, except the
+ * attach-and-leave close, which belongs to the flights and drives the panel
+ * through `collapseForLeave` / `resetAfterLeave`.
+ */
+export function useAttachmentPanel({ onLeaveSheet }: PanelOptions = {}) {
+  const [mode, setMode] = useState<Mode>('closed');
+  const [sheet, setSheet] = useState<Sheet>('photos');
+  /**
+   * True for the length of a close, whichever way it was asked for. The sheet
+   * is still mounted and still collapsing, but its material is already on its
+   * way out.
+   */
+  const [closing, setClosing] = useState(false);
+  /** Pending panel mount, held back while the + gets out of the way. */
+  const leadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const open = useSharedValue(0);
+  /**
+   * 0 the + is in place → 1 it has cleared the space the panel opens on. Its
+   * own value rather than a read of `open`, because it deliberately runs out
+   * of step with the panel: it leads on the way in and trails on the way out.
+   */
+  const plusOut = useSharedValue(0);
+  const morph = useSharedValue(0);
+  const menuOpacity = useSharedValue(1);
+  const gridOpacity = useSharedValue(0);
+  const blur = useSharedValue(0);
+
+  // Drops a lead-in still in flight if the screen goes away mid-open.
+  useEffect(
+    () => () => {
+      if (leadTimer.current !== null) clearTimeout(leadTimer.current);
+    },
+    [],
+  );
+
+  /**
+   * Tearing down the over-keyboard window drops the keyboard with it, while
+   * leaving the field logically focused — which means a later tap on the
+   * field is a no-op and the keyboard never returns. Restoring focus as the
+   * sheet closes keeps it up.
+   */
+  const closeSheet = useCallback(() => {
+    setMode('closed');
+    setClosing(false);
+    KeyboardController.setFocusTo('current');
+  }, []);
+
+  /** Soften, then sharpen: the panel blurs through every change it makes. */
+  const pulseBlur = useCallback(() => {
+    blur.set(
+      withSequence(
+        withTiming(1, { duration: 60, easing: EASE_OUT }),
+        withTiming(0, { duration: DURATION.blur, easing: EASE_FADE }),
+      ),
+    );
+  }, [blur]);
+
+  /** Drops a queued lead-in, so a tap during it never lets the panel arrive. */
+  const clearLead = useCallback(() => {
+    if (leadTimer.current === null) return;
+    clearTimeout(leadTimer.current);
+    leadTimer.current = null;
+  }, []);
+
+  const openMenu = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // The + goes first and alone. The panel opens as the circle around that
+    // glyph and is wider than it, so there is no size at which it can start
+    // without covering the very thing that is trying to move out from under
+    // it. It has to stay unmounted for the length of the lead.
+    plusOut.set(withSpring(1, SPRING.panel));
+    morph.set(0);
+    gridOpacity.set(0);
+    menuOpacity.set(1);
+    blur.set(1);
+    clearLead();
+    leadTimer.current = setTimeout(() => {
+      leadTimer.current = null;
+      setMode('menu');
+      // A spring rather than a curve because the panel starts as the circle
+      // the + just left: an ease-out is already a fifth of the way out by the
+      // second frame and the circle is never seen, where a spring holds small
+      // long enough to read it.
+      open.set(withSpring(1, SPRING.panel));
+      blur.set(withTiming(0, { duration: DURATION.blur, easing: EASE_FADE }));
+    }, DURATION.plusLead);
+  }, [blur, clearLead, gridOpacity, menuOpacity, morph, open, plusOut]);
+
+  const dismiss = useCallback(() => {
+    clearLead();
+    onLeaveSheet?.();
+    // Hands the material to its own native transition for the way out, so it
+    // fades over the same stretch the panel takes to collapse into the +
+    // button. Its opacity is the one thing that cannot carry this — a
+    // `GlassView` under an animated opacity renders nothing at all.
+    setClosing(true);
+    blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
+    // `panelOut`, not `panel`: the sheet is leaving, and a bounce on the way
+    // out would be the panel arguing with the tap that dismissed it.
+    morph.set(withSpring(0, SPRING.panelOut));
+    menuOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    open.set(
+      withSpring(0, SPRING.panelOut, (finished) => {
+        'worklet';
+        if (finished) scheduleOnRN(closeSheet);
+      }),
+    );
+    // The same order read backwards: the panel goes, then the + comes back
+    // into the space it leaves. Delayed rather than slowed, so both
+    // directions are the one spring.
+    plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+  }, [blur, clearLead, closeSheet, gridOpacity, menuOpacity, morph, onLeaveSheet, open, plusOut]);
+
+  /**
+   * Menu → sheet. The one morph, whatever the sheet is about to show: the
+   * camera takes exactly the footprint the grid does, so the panel has one
+   * shape to grow into and one spring to grow on.
+   */
+  const showSheet = useCallback(
+    (next: Sheet) => {
+      setSheet(next);
+      setMode(next);
+      pulseBlur();
+      morph.set(withSpring(1, SPRING.panel));
+      menuOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+      gridOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    },
+    [gridOpacity, menuOpacity, morph, pulseBlur],
+  );
+
+  const backToMenu = useCallback(() => {
+    setMode('menu');
+    onLeaveSheet?.();
+    pulseBlur();
+    morph.set(withSpring(0, SPRING.panel));
+    menuOpacity.set(withTiming(1, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+  }, [gridOpacity, menuOpacity, morph, onLeaveSheet, pulseBlur]);
+
+  const onMenuAction = useCallback(
+    (action: MenuAction) => {
+      // Photos and Camera have somewhere to go in this demo; the rest close.
+      if (action === 'photos') showSheet('photos');
+      else if (action === 'camera') showSheet('camera');
+      else dismiss();
+    },
+    [dismiss, showSheet],
+  );
+
+  const onPlusPress = useCallback(() => {
+    // A lead-in is in flight for its whole length while `mode` is still shut,
+    // so the ref is what says whether this tap is opening or closing.
+    if (mode === 'closed' && leadTimer.current === null) openMenu();
+    else dismiss();
+  }, [dismiss, mode, openMenu]);
+
+  /**
+   * The panel's half of an attach-and-leave: the sheet leaves the way any
+   * close leaves it, back into the + button, on the spring with the bounce
+   * taken out. No completion callback here: the flight is what decides when
+   * it is over.
+   */
+  const collapseForLeave = useCallback(() => {
+    setClosing(true);
+    blur.set(withTiming(1, { duration: DURATION.panel, easing: EASE_FADE }));
+    gridOpacity.set(withTiming(0, { duration: DURATION.crossfade, easing: EASE_FADE }));
+    morph.set(withSpring(0, SPRING.panelOut));
+    open.set(withSpring(0, SPRING.panelOut));
+    plusOut.set(withDelay(DURATION.plusLead, withSpring(0, SPRING.panelOut)));
+  }, [blur, gridOpacity, morph, open, plusOut]);
+
+  /**
+   * The panel's half of the flight landing. Everything the panel drove is
+   * reset outright — it is unmounted by now, so there is nothing left to see
+   * it move. `plusOut` is deliberately untouched: the + came back on its own
+   * spring while the photos flew, and it is on screen.
+   */
+  const resetAfterLeave = useCallback(() => {
+    closeSheet();
+    open.set(0);
+    morph.set(0);
+    gridOpacity.set(0);
+    menuOpacity.set(1);
+    blur.set(0);
+  }, [blur, closeSheet, gridOpacity, menuOpacity, morph, open]);
+
+  return {
+    mode,
+    sheet,
+    closing,
+    open,
+    plusOut,
+    morph,
+    menuOpacity,
+    gridOpacity,
+    blur,
+    onPlusPress,
+    dismiss,
+    backToMenu,
+    onMenuAction,
+    collapseForLeave,
+    resetAfterLeave,
+  };
+}
+```
+
+```tsx title="AttachmentFlight.tsx"
+import { Image } from 'expo-image';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+import {
+  COLORS,
+  COMPOSER,
+  COMPOSER_STRIP_HEIGHT,
+  GRID,
+  GUTTER,
+  mix,
+  SPRING,
+  type Frame,
+} from './constants';
+
+export interface LibraryPhoto {
+  /** `ph://` or `content://` uri — `expo-image` loads it directly. */
+  id: string;
+}
+
+export interface Flight {
+  photo: LibraryPhoto;
+  /**
+   * The cell the photo was sitting in, in window coordinates, measured off
+   * the grid on the frame the flight starts. This is the whole point of the
+   * transition: the thumbnail leaves the place the photo actually occupied,
+   * not the sheet that happened to contain it.
+   */
+  from: Frame;
+  /** Index of the composer slot it is landing on. */
+  slot: number;
+  /**
+   * Corner radius it leaves with. A grid cell's hairline radius by default; a
+   * camera capture leaves as the whole sheet and starts from the sheet's own.
+   */
+  fromRadius?: number;
+}
+
+interface FlightOptions {
+  /** The panel's half of the leave — `collapseForLeave` on the panel hook. */
+  collapsePanel: () => void;
+  /** The panel's half of the landing — `resetAfterLeave` on the panel hook. */
+  resetPanel: () => void;
+  /** Called as the flight lands, so the screen can drop its selection. */
+  onSettled?: () => void;
+}
+
+/**
+ * The composer's attachments and the photos flying into them. It owns the two
+ * shared values both ends of the flight read — `attach`, the flight's own
+ * progress, and `strip`, the slot it is aiming at — and the one move that
+ * needs the panel: `attachAndLeave`, which sends the photos to the composer
+ * while the panel collapses under them.
+ */
+export function useAttachmentFlights({ collapsePanel, resetPanel, onSettled }: FlightOptions) {
+  const [attachments, setAttachments] = useState<LibraryPhoto[]>([]);
+  /** The photos currently crossing from the grid to the composer. */
+  const [flights, setFlights] = useState<Flight[]>([]);
+
+  const attach = useSharedValue(0);
+  /**
+   * 0 no attachment strip → 1 strip open. Lives up here because two views
+   * need it: the composer, which grows around it, and the photos flying into
+   * it, which have to know where the slot they are aiming at currently is.
+   */
+  const strip = useSharedValue(0);
+
+  // Adding the first attachment opens the strip; removing the last one shuts
+  // it. Either way the composer's bottom edge is pinned, so this is the whole
+  // of its height change.
+  const hasAttachments = attachments.length > 0;
+  useEffect(() => {
+    strip.set(withSpring(hasAttachments ? 1 : 0, SPRING.strip));
+  }, [hasAttachments, strip]);
+
+  /** Runs when the flight lands, handing the thumbnails to the composer. */
+  const settle = useCallback(() => {
+    // The hand-off, on one commit: the flying copies come off in the same
+    // breath the composer's own thumbnails stop being held back. Everything
+    // here runs synchronously so React batches it — an await or a timer in
+    // the middle would split it into two commits and double-expose a photo.
+    setFlights([]);
+    onSettled?.();
+    attach.set(0);
+    resetPanel();
+  }, [attach, onSettled, resetPanel]);
+
+  /**
+   * Hands a set of photos to the composer and sends the sheet home. Shared by
+   * the grid's confirm and the camera's shutter: both end the same way, with
+   * copies flying out of wherever the photos were and the panel collapsing
+   * back into the + button underneath them.
+   */
+  const attachAndLeave = useCallback(
+    (leaving: Flight[]) => {
+      setFlights(leaving);
+      setAttachments((prev) => [...prev, ...leaving.map((flight) => flight.photo)]);
+      collapsePanel();
+
+      // The photos go their own way, out of wherever they were sitting. The
+      // sheet's collapse and this are the same length, so they read as one
+      // move coming apart rather than two.
+      attach.set(
+        withSpring(1, SPRING.attach, (finished) => {
+          'worklet';
+          if (finished) scheduleOnRN(settle);
+        }),
+      );
+    },
+    [attach, collapsePanel, settle],
+  );
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((photo) => photo.id !== id));
+  }, []);
+
+  return {
+    attachments,
+    flights,
+    isFlying: flights.length > 0,
+    attach,
+    strip,
+    attachAndLeave,
+    removeAttachment,
+  };
+}
+
+interface FlyingPhotoProps {
+  flight: Flight;
+  screenWidth: number;
+  /** 0 still in the grid → 1 landed on its slot in the composer. */
+  attach: SharedValue<number>;
+  /**
+   * The composer grows around the strip on its own spring, so the slot being
+   * flown into is still rising while the photo flies. Read live, which is
+   * what lands it on the slot instead of near it.
+   */
+  strip: SharedValue<number>;
+  /** Window Y of the composer's bottom edge, tracked live off the keyboard. */
+  composerBottom: SharedValue<number>;
+}
+
+function FlyingPhoto({ flight, screenWidth, attach, strip, composerBottom }: FlyingPhotoProps) {
+  const style = useAnimatedStyle(() => {
+    const a = attach.get();
+
+    const composerTop =
+      composerBottom.get() - COMPOSER.rowHeight - strip.get() * COMPOSER_STRIP_HEIGHT;
+    const step = COMPOSER.thumbSize + COMPOSER.thumbGap;
+    // The strip scrolls, so a slot past the right edge has nowhere to land.
+    // Pinning it to the last visible one is what the strip does to it anyway.
+    const lastVisible = screenWidth - GUTTER - COMPOSER.stripPaddingTop - COMPOSER.thumbSize;
+    const toX = Math.min(GUTTER + COMPOSER.stripPaddingTop + flight.slot * step, lastVisible);
+    const toY = composerTop + COMPOSER.stripPaddingTop;
+
+    return {
+      left: mix(a, flight.from.x, toX),
+      top: mix(a, flight.from.y, toY),
+      width: mix(a, flight.from.w, COMPOSER.thumbSize),
+      height: mix(a, flight.from.h, COMPOSER.thumbSize),
+      borderRadius: mix(a, flight.fromRadius ?? GRID.cellRadius, COMPOSER.thumbRadius),
+    };
+  });
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.photo, style]}>
+      <Image
+        source={flight.photo.id}
+        recyclingKey={flight.photo.id}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+        priority="high"
+        // Already decoded — this is the same image the grid is drawing, and
+        // it is handed over on the frame the cell hides. A fade here would
+        // show the sheet through the photo for the length of it.
+        transition={0}
+        style={StyleSheet.absoluteFill}
+      />
+    </Animated.View>
+  );
+}
+
+interface AttachmentFlightProps extends Omit<FlyingPhotoProps, 'flight'> {
+  flights: Flight[];
+}
+
+/**
+ * The photos crossing from the grid to the composer.
+ *
+ * They are copies, not the cells themselves: the cells belong to a list
+ * inside a sheet that is collapsing at the same time, and nothing survives
+ * being in two coordinate spaces at once. The grid hides the originals on the
+ * frame these appear, so what you see is one photo leaving one place for
+ * another.
+ *
+ * Every copy rides the same `attach` spring. They were picked together and
+ * they arrive together; staggering them would invent an order the taps did
+ * not have.
+ */
+export function AttachmentFlight({ flights, ...drivers }: AttachmentFlightProps) {
+  if (!flights.length) return null;
+
+  return (
+    <>
+      {flights.map((flight) => (
+        <FlyingPhoto key={flight.photo.id} flight={flight} {...drivers} />
+      ))}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  photo: {
+    position: 'absolute',
+    overflow: 'hidden',
+    borderCurve: 'continuous',
+    backgroundColor: COLORS.photoFill,
+  },
+});
+```
+
+</CodePreviewer>
+
+## Common Pitfalls
+
+- **A `GlassView` under an animated opacity renders nothing at all, even at 1.** Every glass surface here mounts at fixed opacity and transitions natively instead: switch `glassEffectStyle` between `'regular'` and `'none'` with `animationDuration`. Start the first render at `'none'` so the transition has somewhere to come from.
+
+- **Never put `overflow: 'hidden'` on or above glass.** An interactive glass surface draws its rim and its press bulge outside its own bounds; a clip cuts both off and leaves a flat disc. The panel clips its contents in a sibling layer laid over the material, and the material rounds itself off an animated `borderRadius`.
+
+- **The panel's own opacity is never animated.** It carries the glass. Every layer inside multiplies its opacity by `openFade` instead, a clamped interpolation of `open` that starts at 0.12 so the circle reads as a circle before the rows arrive.
+
+- **Content wrappers must carry their real size and scale by transform.** A zero-sized wrapper still paints its children, but iOS drops touches that land outside a view's bounds. The menu wrapper is 280×354pt, the grid wrapper is the grid's full size, and both scale from `transformOrigin: 'top left'`.
+
+- **Faded-out layers still swallow taps.** The menu and the grid both stay mounted through the morph. Drive `pointerEvents` from an explicit `interactive: 'menu' | 'grid' | 'none'` prop, or the invisible menu intercepts every tap meant for the grid.
+
+- **Host the sheet in `OverKeyboardView`.** The menu's bottom rows sit over the keyboard by design. On Android a `BlurView` samples its own window, and the over-keyboard window has nothing behind it, so the material falls back to the flat color it was measured at (`#1E1E1E`) instead of a blur.
+
+- **Tearing down the over-keyboard window drops the keyboard while the field stays logically focused.** A later tap on the field is then a no-op. Call `KeyboardController.setFocusTo('current')` as the sheet closes to keep the keyboard up.
+
+- **Set `keyboardShouldPersistTaps="always"` on the grid and the strip.** The keyboard is up the whole time. Without it, the scroll view treats the first tap as "dismiss the keyboard" and swallows it, so the photo never gets selected.
+
+- **Hold the panel back for a 30ms lead while the + glyph slides out.** The panel opens as the circle around that glyph and is 14pt wider than it. There is no starting size at which the two do not overlap, so the panel stays unmounted, not small, until the lead ends.
+
+- **Cut the originals, never fade them.** The grid cell (or the camera preview) goes to `opacity: 0` on the frame its flying copy appears, and the copy renders with `transition={0}` on `expo-image`. Two copies of the same photo pulling apart is the one thing a shared element cannot show.
+
+- **Read the landing slot live.** The composer strip opens on its own spring while the photo flies, so `FlyingPhoto` reads `strip.get()` inside `useAnimatedStyle` every frame. Interpolating toward a pre-computed end point lands the photo near the slot, not on it.
+
+- **Land the hand-off in one React commit.** `settle()` clears the flights, resets `attach`, and resets the panel synchronously so React batches it. An `await` or a timer in the middle splits it into two commits and double-exposes a photo.
+
+- **Clamp opacity interpolations, let transforms extend.** `withSpring` settles past 1 with `dampingRatio` below 1. An opacity past 1 is an error; a scale past 1 is the bounce.
+
+- **Use `.get()` and `.set()` on shared values** instead of `.value` for React Compiler compatibility, and `scheduleOnRN` from `react-native-worklets` for JS callbacks out of worklets.
