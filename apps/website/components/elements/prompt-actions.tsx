@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useRef, useState } from 'react'
 
 const buttonBase =
-  'inline-flex items-center justify-center text-sm/7 font-medium text-taupe-800 hover:text-taupe-900 dark:text-taupe-300 dark:hover:text-taupe-200 cursor-pointer'
+  'inline-flex items-center justify-center text-sm/7 font-medium text-taupe-50 hover:bg-taupe-700 dark:text-taupe-950 dark:hover:bg-taupe-400 cursor-pointer'
 
 const menuPanelSpring = { type: 'spring' as const, duration: 0.25, bounce: 0 }
 
@@ -88,7 +88,7 @@ Focus on building my mental model of the animation system, not just describing t
 
   return (
     <div
-      className="inline-flex items-stretch border-shadow rounded-lg bg-taupe-50 dark:bg-taupe-50/[0.02]"
+      className="inline-flex items-stretch border-shadow rounded-lg bg-taupe-800 dark:bg-taupe-300"
     >
       <motion.button
         type="button"
@@ -97,7 +97,7 @@ Focus on building my mental model of the animation system, not just describing t
         transition={{ type: 'spring', duration: 0.4, bounce: 0.1 }}
         className={clsx(
           buttonBase,
-          'relative gap-1.5 rounded-l-lg px-3 py-1 border-r border-taupe-950/10 dark:border-taupe-50/15 overflow-hidden',
+          'relative gap-1.5 rounded-l-lg px-3 py-1 border-r border-taupe-50/15 dark:border-taupe-950/10 overflow-hidden',
         )}
       >
         <span className="relative size-4 shrink-0">
