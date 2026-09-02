@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Agentation } from "agentation";
 import { Manrope } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { ButtonLink } from "@/components/elements/button";
@@ -80,6 +81,9 @@ export default function RootLayout({
         {children}
         <Footer />
         <Analytics />
+        {process.env.NODE_ENV === "development" && (
+          <Agentation endpoint="http://localhost:4747" />
+        )}
       </body>
     </html>
   );
