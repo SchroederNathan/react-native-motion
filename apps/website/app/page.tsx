@@ -18,7 +18,6 @@ export default async function Page() {
           id="hero"
           eyebrow={
             <AnnouncementBadge
-              href="#"
               text="Introducing React Native Motion v1.0"
               badgeText="New"
             />
