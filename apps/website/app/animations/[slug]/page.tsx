@@ -1,5 +1,7 @@
-import { getAllAnimationSlugs } from '@/lib/animations'
+import { getAllAnimationSlugs, getAnimationGitHubUrl } from '@/lib/animations'
 import { VideoDemo } from '@/components/elements/video-demo'
+import { GitHubIcon } from '@/components/elements/github-link'
+import { PromptActionsClient } from '@/components/elements/prompt-actions-client'
 
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -62,6 +64,15 @@ export default async function AnimationPage({
               </svg>
               Back
             </Link>
+            <a
+              href={getAnimationGitHubUrl(slug)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center py-1 text-taupe-800 hover:text-taupe-900 dark:text-taupe-300 dark:hover:text-taupe-200"
+              aria-label="View source on GitHub"
+            >
+              <GitHubIcon className="size-7" />
+            </a>
           </div>
           <div className="flex-1 flex flex-col justify-center">
             <h1 className="text-4xl/10 tracking-tight font-medium text-taupe-950 dark:text-taupe-50 mb-3 text-wrap-balance">
@@ -82,6 +93,9 @@ export default async function AnimationPage({
                 ))}
               </div>
             )}
+            <div className="mt-6 self-start">
+              <PromptActionsClient />
+            </div>
           </div>
         </div>
       </div>
