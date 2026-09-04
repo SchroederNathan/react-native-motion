@@ -41,6 +41,9 @@ export function useToast() {
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
+  // Layout heights by id. Toasts can be one to three lines tall, and the
+  // stack offsets are computed from the front toast's height.
+  const [heights, setHeights] = useState<Record<number, number>>({});
   const nextId = useRef(1);
 
   const showToast = useCallback((options: ToastOptions) => {
@@ -56,9 +59,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const handleDismissed = useCallback((id: number) => {
     setToasts((current) => current.filter((t) => t.id !== id));
+    setHeights((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  const handleHeightChange = useCallback((id: number, height: number) => {
+    setHeights((current) =>
+      current[id] === height ? current : { ...current, [id]: height },
+    );
   }, []);
 
   const value = useMemo(() => ({ showToast }), [showToast]);
+
+  // The newest non-exiting toast is the front; the rest peek above its top.
+  const active = toasts.filter((t) => !t.exiting);
+  const frontHeight = active.length
+    ? heights[active[active.length - 1].id]
+    : undefined;
 
   // Oldest renders first so newer toasts naturally sit on top of the stack.
   // Ids only grow, so "newer active entries" is the distance from the front.
@@ -72,6 +92,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           index={
             toasts.filter((t) => !t.exiting && t.id > toast.id).length
           }
+          height={heights[toast.id]}
+          frontHeight={frontHeight}
+          onHeightChange={handleHeightChange}
           onDismissStart={handleDismissStart}
           onDismissed={handleDismissed}
         />

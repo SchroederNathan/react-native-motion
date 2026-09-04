@@ -3,12 +3,19 @@ import { ThemeProvider, useTheme } from '@/theme';
 import { stackToastTheme } from './theme';
 import { ToastProvider, useToast } from './toast-provider';
 
+// A mix of one-, two-, and three-line messages so the stack shows different
+// heights.
 const TOAST_MESSAGES = [
   'Changes saved',
   'Link copied',
   'Added to your library',
   'Reminder set',
-  'Download complete',
+  'Photo uploaded',
+  'Download complete. The file is ready to open.',
+  'Synced to every device signed in to this account.',
+  'Your order is confirmed. A receipt is on its way to your inbox.',
+  'Backup finished. 2,418 photos and 96 videos are now safe in the cloud and ready to restore.',
+  'You are offline. Edits are saved on this device and will sync when a connection returns.',
 ] as const;
 
 function StackToastContent() {

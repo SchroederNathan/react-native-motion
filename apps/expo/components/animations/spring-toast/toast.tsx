@@ -38,7 +38,11 @@ const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const DISMISS_DISTANCE = 56;
 const DISMISS_VELOCITY = 800;
 
-/** Stack layout: each toast behind the front peeks up and shrinks a step. */
+/**
+ * Stack layout: each toast behind the front peeks up and shrinks a step. The
+ * peek is measured from the front toast's top edge, so one- to three-line
+ * toasts still step up evenly.
+ */
 const STACK_PEEK = 14;
 const STACK_SCALE_STEP = 0.05;
 const MAX_VISIBLE = 3;
@@ -49,15 +53,33 @@ function rubberBand(distance: number) {
   return (40 * distance) / (distance + 120);
 }
 
+/**
+ * Vertical offset that puts a toast's top edge STACK_PEEK per slot above the
+ * front toast's top edge. Every toast is anchored to the same bottom edge and
+ * scales about its own center, so the offset depends on both heights.
+ */
+function stackOffset(index: number, height: number, frontHeight: number) {
+  const scale = 1 - index * STACK_SCALE_STEP;
+  return -frontHeight + (height * (1 + scale)) / 2 - index * STACK_PEEK;
+}
+
 export function Toast({
   toast,
   index,
+  height,
+  frontHeight,
+  onHeightChange,
   onDismissStart,
   onDismissed,
 }: {
   toast: ToastConfig;
   /** Position from the front of the stack: 0 = newest, on top. */
   index: number;
+  /** Measured layout height of this toast; undefined until the first layout. */
+  height?: number;
+  /** Measured height of the front toast, the baseline the stack peeks above. */
+  frontHeight?: number;
+  onHeightChange: (id: number, height: number) => void;
   onDismissStart: (id: number) => void;
   onDismissed: (id: number) => void;
 }) {
@@ -70,8 +92,9 @@ export function Toast({
   const progress = useSharedValue(0);
   const opacity = useSharedValue(0);
   const dragY = useSharedValue(0);
-  // Where the stack wants this toast: springs when the index shifts.
-  const stackY = useSharedValue(-index * STACK_PEEK);
+  // Where the stack wants this toast: springs when the index or the heights
+  // shift. New toasts always enter at the front, where the offset is 0.
+  const stackY = useSharedValue(0);
   const stackScale = useSharedValue(1 - index * STACK_SCALE_STEP);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,18 +166,22 @@ export function Toast({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Follow the stack as newer toasts arrive or front ones leave.
+  // Follow the stack as newer toasts arrive or front ones leave. Heights come
+  // from layout, so the offset waits until this toast and the front one are
+  // both measured; a toast in front with a different height moves the rest.
   useEffect(() => {
     if (exitingRef.current) return;
-    const y = -index * STACK_PEEK;
     const scale = 1 - index * STACK_SCALE_STEP;
-    stackY.set(reduced ? y : withSpring(y));
     stackScale.set(reduced ? scale : withSpring(scale));
+    if (height !== undefined && frontHeight !== undefined) {
+      const y = stackOffset(index, height, frontHeight);
+      stackY.set(reduced ? y : withSpring(y));
+    }
     // Deep entries fade away instead of poking out of the top of the stack.
     if (index >= MAX_VISIBLE) {
       opacity.set(withTiming(0, { duration: FADE_IN_MS }));
     }
-  }, [index, opacity, reduced, stackScale, stackY]);
+  }, [frontHeight, height, index, opacity, reduced, stackScale, stackY]);
 
   const pan = Gesture.Pan()
     // Only the front toast is under the finger; the rest are decoration.
@@ -204,6 +231,7 @@ export function Toast({
   return (
     <GestureDetector gesture={pan}>
       <Animated.View
+        onLayout={(e) => onHeightChange(toast.id, e.nativeEvent.layout.height)}
         style={[
           styles.container,
           {
@@ -223,7 +251,7 @@ export function Toast({
               styles.message,
               { color: colors.background, fontFamily: theme.fonts.semibold },
             ]}
-            numberOfLines={2}
+            numberOfLines={3}
           >
             {toast.message}
           </Text>

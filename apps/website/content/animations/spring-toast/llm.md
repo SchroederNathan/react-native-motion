@@ -43,17 +43,18 @@ const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1)
 const DISMISS_DISTANCE = 56   // drag distance that commits a dismiss
 const DISMISS_VELOCITY = 800  // flick velocity that commits a dismiss
 
-const STACK_PEEK = 14         // each toast behind peeks up this much
+const STACK_PEEK = 14         // each toast behind peeks up this much, measured from the front toast's top edge
 const STACK_SCALE_STEP = 0.05 // and shrinks this much per step
 const MAX_VISIBLE = 3         // deeper entries fade out
 ```
 
 ## Provider and stack index
 
-The provider owns the toast array. Ids come from a ref counter and only grow. Oldest renders first so newer toasts sit on top without animated zIndex.
+The provider owns the toast array and a map of measured heights by id. Ids come from a ref counter and only grow. Oldest renders first so newer toasts sit on top without animated zIndex.
 
 ```tsx
 const [toasts, setToasts] = useState<ToastEntry[]>([])
+const [heights, setHeights] = useState<Record<number, number>>({})
 const nextId = useRef(1)
 
 const showToast = useCallback((options: ToastOptions) => {
@@ -69,17 +70,36 @@ const handleDismissStart = useCallback((id: number) => {
 
 const handleDismissed = useCallback((id: number) => {
   setToasts((current) => current.filter((t) => t.id !== id))
+  setHeights((current) => {
+    const next = { ...current }
+    delete next[id]
+    return next
+  })
+}, [])
+
+const handleHeightChange = useCallback((id: number, height: number) => {
+  setHeights((current) =>
+    current[id] === height ? current : { ...current, [id]: height },
+  )
 }, [])
 ```
 
-Each toast's stack index is the count of non-exiting newer entries. Index 0 is the front.
+Each toast's stack index is the count of non-exiting newer entries. Index 0 is the front. The front toast's measured height is the baseline the rest of the stack peeks above.
 
 ```tsx
+const active = toasts.filter((t) => !t.exiting)
+const frontHeight = active.length
+  ? heights[active[active.length - 1].id]
+  : undefined
+
 {toasts.map((toast) => (
   <Toast
     key={toast.id}
     toast={toast}
     index={toasts.filter((t) => !t.exiting && t.id > toast.id).length}
+    height={heights[toast.id]}
+    frontHeight={frontHeight}
+    onHeightChange={handleHeightChange}
     onDismissStart={handleDismissStart}
     onDismissed={handleDismissed}
   />
@@ -96,8 +116,14 @@ Each toast owns five shared values. `progress` is entrance-only; the exit is a s
 const progress = useSharedValue(0) // 0 = below the edge, 1 = resting
 const opacity = useSharedValue(0)
 const dragY = useSharedValue(0)
-const stackY = useSharedValue(-index * STACK_PEEK)
+const stackY = useSharedValue(0) // new toasts always enter at the front
 const stackScale = useSharedValue(1 - index * STACK_SCALE_STEP)
+```
+
+The toast reports its layout height to the provider from `onLayout` on the animated container:
+
+```tsx
+onLayout={(e) => onHeightChange(toast.id, e.nativeEvent.layout.height)}
 ```
 
 Animate in once on mount and start the auto-dismiss timer:
@@ -111,19 +137,26 @@ useEffect(() => {
 }, [])
 ```
 
-Follow the stack when the index shifts. Entries past `MAX_VISIBLE` fade instead of poking out of the top.
+Follow the stack when the index or a height shifts. Every toast is anchored to the same bottom edge and scales about its own center, so the offset that lines a toast's top edge up `STACK_PEEK` per slot above the front toast's top edge depends on both heights. The offset waits until this toast and the front one are both measured. Entries past `MAX_VISIBLE` fade instead of poking out of the top.
 
 ```tsx
+function stackOffset(index: number, height: number, frontHeight: number) {
+  const scale = 1 - index * STACK_SCALE_STEP
+  return -frontHeight + (height * (1 + scale)) / 2 - index * STACK_PEEK
+}
+
 useEffect(() => {
   if (exitingRef.current) return
-  const y = -index * STACK_PEEK
   const scale = 1 - index * STACK_SCALE_STEP
-  stackY.set(reduced ? y : withSpring(y))
   stackScale.set(reduced ? scale : withSpring(scale))
+  if (height !== undefined && frontHeight !== undefined) {
+    const y = stackOffset(index, height, frontHeight)
+    stackY.set(reduced ? y : withSpring(y))
+  }
   if (index >= MAX_VISIBLE) {
     opacity.set(withTiming(0, { duration: FADE_IN_MS }))
   }
-}, [index, opacity, reduced, stackScale, stackY])
+}, [frontHeight, height, index, opacity, reduced, stackScale, stackY])
 ```
 
 One animated style combines entrance, stack position, and drag:
@@ -227,7 +260,7 @@ const restartTimer = useCallback(() => {
 
 ## Toast visuals
 
-A dark rounded row: leading checkmark icon, `numberOfLines={2}` message, optional uppercase action button (calls `onActionPress` then `dismiss('close')`), and a close icon button. Both pressables use `hitSlop={8}`.
+A dark rounded row: leading checkmark icon, `numberOfLines={3}` message (toasts run one to three lines tall), optional uppercase action button (calls `onActionPress` then `dismiss('close')`), and a close icon button. Both pressables use `hitSlop={8}`.
 
 ```tsx
 container: {
@@ -260,6 +293,7 @@ Wrap the screen in `ToastProvider` (and `SafeAreaProvider` if the app does not a
 ## Do not change these behaviors
 
 - Stack index = count of non-exiting entries with a higher id, not array position.
+- Stack offsets come from measured heights via `stackOffset`, so toasts of different heights peek evenly above the front toast's top edge. Wait for both `height` and `frontHeight` before setting the first offset.
 - `onDismissStart` fires at the start of the exit; removal waits for the fade.
 - Upward drag goes through `rubberBand`; downward drag is raw.
 - Dismiss commits on distance (`56`) OR velocity (`800`).
