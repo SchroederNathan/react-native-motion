@@ -10,7 +10,7 @@ export const meta = {
 
 Toasts stack at the bottom of the screen. Each new one springs up from below the edge; the ones already there step up 14px and shrink 5% per slot. The front toast follows a downward drag and rubber-bands against an upward one. A drag past 56px, or a flick past 800 px/s, commits the dismiss with a light haptic, and the toasts behind spring forward. Every toast auto-dismisses after 3 seconds and carries an optional action button plus a close button.
 
-<Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-haptics', 'react-native-safe-area-context', '@expo/vector-icons']} />
+<Installer packages={['react-native-reanimated', 'react-native-gesture-handler', 'react-native-worklets', 'expo-haptics', 'react-native-safe-area-context', 'react-native-svg', 'lucide-react-native']} />
 
 <CodePreviewer>
 
@@ -165,7 +165,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 ```
 
 ```tsx title="Toast.tsx"
-import Ionicons from '@expo/vector-icons/Ionicons'
+import { Check, X } from 'lucide-react-native'
 import * as Haptics from 'expo-haptics'
 import { useCallback, useEffect, useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -380,7 +380,7 @@ export function Toast({
       >
         <View style={styles.content}>
           <View style={styles.iconContainer}>
-            <Ionicons name="checkmark" size={20} color={TOAST_CONTENT} />
+            <Check size={20} color={TOAST_CONTENT} />
           </View>
           <Text style={styles.message} numberOfLines={2}>
             {toast.message}
@@ -395,7 +395,7 @@ export function Toast({
             hitSlop={8}
             style={styles.closeButton}
           >
-            <Ionicons name="close" size={18} color={TOAST_CONTENT} />
+            <X size={18} color={TOAST_CONTENT} />
           </Pressable>
         </View>
       </Animated.View>

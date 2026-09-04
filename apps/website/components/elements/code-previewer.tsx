@@ -8,7 +8,6 @@ import {
   type ReactElement,
 } from 'react'
 import { FileIcon } from './file-icon'
-import { PromptActionsClient } from './prompt-actions-client'
 
 interface FileEntry {
   name: string
@@ -160,9 +159,8 @@ export function CodePreviewer({ children }: { children: ReactNode }) {
 
   return (
     <div className="mt-10 mb-10">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <h3 className="text-lg/7 tracking-tight font-medium text-taupe-950 dark:text-taupe-50">Copy and paste the following code into your project.</h3>
-        <PromptActionsClient />
       </div>
     <div className="rounded-xl overflow-hidden border-shadow bg-taupe-50 dark:bg-taupe-50/[0.02]">
       {/* Mobile: horizontal tab bar */}
