@@ -15,8 +15,7 @@ react-native-gesture-handler
 react-native-worklets
 expo-haptics
 react-native-safe-area-context
-react-native-svg
-lucide-react-native
+@expo/vector-icons
 ```
 
 ## Data shapes and constants
