@@ -1,7 +1,11 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  SafeAreaInsetsContext,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from '@/theme';
 import { stackToastTheme } from './theme';
-import { ToastProvider, useToast } from './toast-provider';
+import { ToastProvider, useToast, type ToastPosition } from './toast-provider';
 
 // A mix of one-, two-, and three-line messages so the stack shows different
 // heights.
@@ -18,13 +22,22 @@ const TOAST_MESSAGES = [
   'You are offline. Edits are saved on this device and will sync when a connection returns.',
 ] as const;
 
+/** Height of the native stack header bar below the status bar. */
+const HEADER_BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 56;
+
 function StackToastContent() {
   const { colors, theme, tokens } = useTheme();
   const { showToast } = useToast();
 
-  const showRandomToast = () => {
+  const showRandomToast = (position: ToastPosition) => {
     const index = Math.floor(Math.random() * TOAST_MESSAGES.length);
-    showToast({ message: TOAST_MESSAGES[index] });
+    showToast({ message: TOAST_MESSAGES[index], position });
+  };
+
+  const labelStyle = {
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.semibold,
+    fontSize: tokens.fontSize.body,
   };
 
   return (
@@ -32,18 +45,18 @@ function StackToastContent() {
       <TouchableOpacity
         accessibilityRole="button"
         activeOpacity={0.7}
-        onPress={showRandomToast}
+        onPress={() => showRandomToast('top')}
         style={styles.button}
       >
-        <Text
-          style={{
-            color: '#FFFFFF',
-            fontFamily: theme.fonts.semibold,
-            fontSize: tokens.fontSize.body,
-          }}
-        >
-          Show toast
-        </Text>
+        <Text style={labelStyle}>Toast from top</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        accessibilityRole="button"
+        activeOpacity={0.7}
+        onPress={() => showRandomToast('bottom')}
+        style={styles.button}
+      >
+        <Text style={labelStyle}>Toast from bottom</Text>
       </TouchableOpacity>
     </View>
   );
@@ -51,11 +64,19 @@ function StackToastContent() {
 
 /** Self-contained screen: its own theme + the toast host provider. */
 export function StackToastScreen() {
+  const insets = useSafeAreaInsets();
+  // This route draws a native header. Toasts measure from the safe area, so
+  // extend the top inset past the header; otherwise a top toast sits under the
+  // back button and the header takes the start of its drag.
+  const toastInsets = { ...insets, top: insets.top + HEADER_BAR_HEIGHT };
+
   return (
     <ThemeProvider theme={stackToastTheme}>
-      <ToastProvider>
-        <StackToastContent />
-      </ToastProvider>
+      <SafeAreaInsetsContext.Provider value={toastInsets}>
+        <ToastProvider>
+          <StackToastContent />
+        </ToastProvider>
+      </SafeAreaInsetsContext.Provider>
     </ThemeProvider>
   );
 }
@@ -65,6 +86,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 12,
   },
   button: {
     minHeight: 44,

@@ -65,7 +65,7 @@ export const animations: Animation[] = [
     title: 'Stack Toast',
     slug: 'spring-toast',
     description:
-      'Stacking bottom toasts: each new one springs up and pushes the rest back a step, smaller behind smaller. The front toast follows the finger — rubber-banding upward, committing on a downward flick — and dismissing it springs the stack forward.',
+      'Stacking toasts from the bottom or the top of the screen: each new one springs in and pushes the rest back a step, smaller behind smaller. The front toast follows the finger — rubber-banding away from the edge, committing on a flick toward it — and dismissing it springs the stack forward.',
     tags: ['toast', 'stack', 'spring', 'gesture', 'swipe-to-dismiss', 'haptics', 'notification'],
     video: require('../assets/videos/spring-toast.mp4'),
   },

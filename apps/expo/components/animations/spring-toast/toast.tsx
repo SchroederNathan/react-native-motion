@@ -16,47 +16,54 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useTheme } from '@/theme';
 import { taupe } from '@/theme/palette';
 
+/** Screen edge a toast enters from, rests against, and dismisses toward. */
+export type ToastPosition = 'top' | 'bottom';
+
 export interface ToastConfig {
   id: number;
   message: string;
+  position: ToastPosition;
   actionText?: string;
   onActionPress?: () => void;
 }
 
-/** Travel distance of the entrance — far enough to clear the bottom edge. */
+/** Travel distance of the entrance — far enough to clear the screen edge. */
 const ENTER_OFFSET = 200;
 const HIDDEN_SCALE = 0.7;
 const AUTO_DISMISS_MS = 3000;
 const FADE_IN_MS = 200;
 const EXIT_MS = 160;
-/** How far the front toast slides down while fading out on close/timeout. */
+/** How far the front toast slides toward its edge while fading out on close/timeout. */
 const EXIT_DROP = 40;
 /** Extra travel a swipe-dismissed toast keeps after the finger lets go. */
 const SWIPE_EXIT_DROP = 80;
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
-/** A downward drag past this distance, or a flick past this velocity, commits. */
+/** A drag toward the edge past this distance, or a flick past this velocity, commits. */
 const DISMISS_DISTANCE = 56;
 const DISMISS_VELOCITY = 800;
 
 /**
- * Stack layout: each toast behind the front peeks up and shrinks a step. The
- * peek is measured from the front toast's top edge, so one- to three-line
- * toasts still step up evenly.
+ * Stack layout: each toast behind the front peeks out and shrinks a step. The
+ * peek is measured from the front toast's far edge (top edge for a bottom
+ * stack, bottom edge for a top stack), so one- to three-line toasts still
+ * step out evenly.
  */
 const STACK_PEEK = 14;
 const STACK_SCALE_STEP = 0.05;
 const MAX_VISIBLE = 3;
 
-/** Dragging upward resists toward an asymptote instead of following the finger. */
+/** Dragging away from the edge resists toward an asymptote instead of following the finger. */
 function rubberBand(distance: number) {
   'worklet';
   return (40 * distance) / (distance + 120);
 }
 
 /**
- * Vertical offset that puts a toast's top edge STACK_PEEK per slot above the
- * front toast's top edge. Every toast is anchored to the same bottom edge and
- * scales about its own center, so the offset depends on both heights.
+ * Vertical offset that puts a toast's far edge STACK_PEEK per slot beyond the
+ * front toast's far edge, for a stack anchored to the bottom of the screen.
+ * Every toast is anchored to the same edge and scales about its own center, so
+ * the offset depends on both heights. A top stack is the mirror image, so it
+ * uses the negated value.
  */
 function stackOffset(index: number, height: number, frontHeight: number) {
   const scale = 1 - index * STACK_SCALE_STEP;
@@ -77,7 +84,7 @@ export function Toast({
   index: number;
   /** Measured layout height of this toast; undefined until the first layout. */
   height?: number;
-  /** Measured height of the front toast, the baseline the stack peeks above. */
+  /** Measured height of the front toast, the baseline the stack peeks beyond. */
   frontHeight?: number;
   onHeightChange: (id: number, height: number) => void;
   onDismissStart: (id: number) => void;
@@ -87,8 +94,13 @@ export function Toast({
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
 
-  // 0 = hidden below the edge, 1 = resting. Entrance only — the exit is a
-  // slide-down fade, not this spring in reverse.
+  // Every vertical motion (entrance, stack peek, drag, exit drop) points
+  // toward the anchored edge: +1 is down for a bottom toast, -1 is up for a
+  // top toast. Flipping this one sign mirrors the whole animation.
+  const dir = toast.position === 'top' ? -1 : 1;
+
+  // 0 = hidden past the edge, 1 = resting. Entrance only — the exit is a
+  // slide-out fade, not this spring in reverse.
   const progress = useSharedValue(0);
   const opacity = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -131,19 +143,19 @@ export function Toast({
       if (reduced) return;
       if (kind === 'swipe') {
         dragY.set(
-          withTiming(dragY.get() + SWIPE_EXIT_DROP, {
+          withTiming(dragY.get() + dir * SWIPE_EXIT_DROP, {
             duration: EXIT_MS,
             easing: EASE_OUT,
           }),
         );
       } else if (indexRef.current === 0) {
         dragY.set(
-          withTiming(EXIT_DROP, { duration: EXIT_MS, easing: EASE_OUT }),
+          withTiming(dir * EXIT_DROP, { duration: EXIT_MS, easing: EASE_OUT }),
         );
       }
       // A toast expiring behind the front just fades where it sits.
     },
-    [clearTimer, dragY, finishDismiss, onDismissStart, opacity, reduced, toast.id],
+    [clearTimer, dir, dragY, finishDismiss, onDismissStart, opacity, reduced, toast.id],
   );
 
   const restartTimer = useCallback(() => {
@@ -174,14 +186,14 @@ export function Toast({
     const scale = 1 - index * STACK_SCALE_STEP;
     stackScale.set(reduced ? scale : withSpring(scale));
     if (height !== undefined && frontHeight !== undefined) {
-      const y = stackOffset(index, height, frontHeight);
+      const y = dir * stackOffset(index, height, frontHeight);
       stackY.set(reduced ? y : withSpring(y));
     }
-    // Deep entries fade away instead of poking out of the top of the stack.
+    // Deep entries fade away instead of poking out of the far side of the stack.
     if (index >= MAX_VISIBLE) {
       opacity.set(withTiming(0, { duration: FADE_IN_MS }));
     }
-  }, [frontHeight, height, index, opacity, reduced, stackScale, stackY]);
+  }, [dir, frontHeight, height, index, opacity, reduced, stackScale, stackY]);
 
   const pan = Gesture.Pan()
     // Only the front toast is under the finger; the rest are decoration.
@@ -191,16 +203,14 @@ export function Toast({
       scheduleOnRN(clearTimer);
     })
     .onUpdate((e) => {
-      dragY.set(
-        e.translationY >= 0
-          ? e.translationY
-          : -rubberBand(-e.translationY),
-      );
+      // Measured toward the edge: positive follows the finger, negative resists.
+      const toward = e.translationY * dir;
+      dragY.set(dir * (toward >= 0 ? toward : -rubberBand(-toward)));
     })
     .onEnd((e) => {
       if (
-        e.translationY > DISMISS_DISTANCE ||
-        e.velocityY > DISMISS_VELOCITY
+        e.translationY * dir > DISMISS_DISTANCE ||
+        e.velocityY * dir > DISMISS_VELOCITY
       ) {
         scheduleOnRN(commitSwipeDismiss);
       } else {
@@ -217,7 +227,10 @@ export function Toast({
     return {
       opacity: opacity.get(),
       transform: [
-        { translateY: (1 - p) * ENTER_OFFSET + stackY.get() + dragY.get() },
+        {
+          translateY:
+            (1 - p) * ENTER_OFFSET * dir + stackY.get() + dragY.get(),
+        },
         { scale: (HIDDEN_SCALE + (1 - HIDDEN_SCALE) * p) * stackScale.get() },
       ],
     };
@@ -234,8 +247,10 @@ export function Toast({
         onLayout={(e) => onHeightChange(toast.id, e.nativeEvent.layout.height)}
         style={[
           styles.container,
+          toast.position === 'top'
+            ? { top: insets.top + 16 }
+            : { bottom: insets.bottom + 16 },
           {
-            bottom: insets.bottom + 16,
             backgroundColor: colors.text,
             borderColor: scheme === 'dark' ? '#FFFFFF' : taupe[900],
           },
